@@ -1,0 +1,148 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  OPERADOR
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         UserRole @default(OPERADOR)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+enum Channel {
+  WHATSAPP
+  SMS
+  EMAIL
+}
+
+// Cliente que pode receber cobranças
+model Client {
+  id             String   @id @default(uuid())
+  name           String
+  document       String? // CPF/CNPJ
+  email          String?
+  phoneE164      String? // formato +5511999998888, usado para WhatsApp e SMS
+  whatsappOptIn  Boolean  @default(true)
+  smsOptIn       Boolean  @default(true)
+  emailOptIn     Boolean  @default(true)
+  active         Boolean  @default(true)
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  charges       Charge[]
+
+  @@index([name])
+}
+
+enum ChargeStatus {
+  PENDENTE
+  ENVIADA
+  PAGA
+  VENCIDA
+  CANCELADA
+}
+
+// Cobrança emitida para um cliente
+model Charge {
+  id            String       @id @default(uuid())
+  client        Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId      String
+  description   String
+  amountCents   Int
+  dueDate       DateTime
+  status        ChargeStatus @default(PENDENTE)
+  paymentLink   String?
+  externalRef   String? // referência ao boleto/pix/pedido no sistema de origem
+  createdBy     String? // userId de quem criou
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  paidAt        DateTime?
+  canceledAt    DateTime?
+
+  notifications NotificationLog[]
+
+  @@index([status])
+  @@index([dueDate])
+}
+
+enum TemplateType {
+  COBRANCA_PENDENTE
+  LEMBRETE_VENCIMENTO
+  COBRANCA_VENCIDA
+  CONFIRMACAO_PAGAMENTO
+}
+
+// Modelos de mensagem por canal, com placeholders {{cliente}}, {{valor}}, {{vencimento}}, {{linkPagamento}}, {{descricao}}
+model MessageTemplate {
+  id        String       @id @default(uuid())
+  channel   Channel
+  type      TemplateType
+  name      String
+  subject   String? // usado apenas em EMAIL
+  body      String
+  active    Boolean      @default(true)
+  // nome do template pré-aprovado na Meta, obrigatório apenas para WHATSAPP fora da janela de 24h
+  providerTemplateName String?
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@unique([channel, type])
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  SKIPPED
+}
+
+// Registro de cada tentativa de envio, por canal, para auditoria e status de entrega
+model NotificationLog {
+  id                String              @id @default(uuid())
+  charge            Charge              @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+  chargeId          String
+  channel           Channel
+  status            NotificationStatus  @default(QUEUED)
+  destination       String // telefone E.164 ou e-mail usado no envio
+  templateType      TemplateType
+  providerMessageId String?
+  errorMessage      String?
+  attempt           Int                 @default(1)
+  queuedAt          DateTime            @default(now())
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  readAt            DateTime?
+  failedAt          DateTime?
+
+  @@index([chargeId])
+  @@index([channel, status])
+  @@index([providerMessageId])
+}
+
+// Regras de lembrete automático (ex: 3 dias antes do vencimento, no dia, e 1/5 dias após vencida)
+model ReminderRule {
+  id          String   @id @default(uuid())
+  name        String
+  offsetDays  Int // negativo = antes do vencimento, positivo = depois (vencida)
+  templateType TemplateType
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+}
