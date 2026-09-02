@@ -1,4 +1,4 @@
-# ValidaMed - Cobrança Multicanal (SMS, WhatsApp e E-mail)
+# CECIM - Financeiro (Cobrança Multicanal: SMS, WhatsApp e E-mail)
 
 Sistema completo para emitir cobranças e enviá-las automaticamente para
 **clientes selecionados** por **SMS**, **WhatsApp** e **E-mail**, usando o
@@ -45,8 +45,8 @@ número de celular ("chip") novo contratado para a operação.
 5. Gere um **token de acesso permanente** (usuário de sistema, com
    permissão `whatsapp_business_messaging`).
 6. Crie e submeta para aprovação os **templates de mensagem** usados fora da
-   janela de 24h (ex: `cobranca_validamed`, `lembrete_vencimento_validamed`,
-   `cobranca_vencida_validamed`) — o texto sugerido está em `prisma/seed.ts`.
+   janela de 24h (ex: `cobranca_cecim`, `lembrete_vencimento_cecim`,
+   `cobranca_vencida_cecim`) — o texto sugerido está em `prisma/seed.ts`.
 7. Preencha no `.env`: `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_BUSINESS_ACCOUNT_ID`,
    `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_TEMPLATE_NAME`.
 8. Configure o **webhook** apontando para

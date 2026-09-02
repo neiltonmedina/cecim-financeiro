@@ -16,7 +16,7 @@ export default () => ({
     businessAccountId: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID ?? '',
     accessToken: process.env.WHATSAPP_ACCESS_TOKEN ?? '',
     verifyToken: process.env.WHATSAPP_VERIFY_TOKEN ?? '',
-    templateName: process.env.WHATSAPP_TEMPLATE_NAME ?? 'cobranca_validamed',
+    templateName: process.env.WHATSAPP_TEMPLATE_NAME ?? 'cobranca_cecim',
     templateLanguage: process.env.WHATSAPP_TEMPLATE_LANGUAGE ?? 'pt_BR',
   },
   twilio: {

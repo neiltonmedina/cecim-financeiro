@@ -1,7 +1,7 @@
 {
-  "name": "validamed-brasil-cobranca",
+  "name": "cecim-financeiro",
   "version": "1.0.0",
-  "description": "Sistema de cobrança multicanal (SMS, WhatsApp e E-mail) para clientes selecionados",
+  "description": "CECIM - Financeiro: sistema de cobrança multicanal (SMS, WhatsApp e E-mail) para clientes selecionados",
   "license": "UNLICENSED",
   "private": true,
   "scripts": {

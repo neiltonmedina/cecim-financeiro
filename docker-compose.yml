@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: validamed_cobranca
+      POSTGRES_DB: cecim_financeiro
     ports:
       - "5432:5432"
     volumes:

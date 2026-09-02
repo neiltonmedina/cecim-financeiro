@@ -16,7 +16,7 @@ async function bootstrap() {
   );
 
   const config = new DocumentBuilder()
-    .setTitle('ValidaMed - Cobrança Multicanal')
+    .setTitle('CECIM - Financeiro | Cobrança Multicanal')
     .setDescription('API para emissão de cobranças por SMS, WhatsApp e E-mail para clientes selecionados')
     .setVersion('1.0')
     .addBearerAuth()

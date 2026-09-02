@@ -18,7 +18,7 @@ const DEFAULT_TEMPLATES: Array<{
     body:
       'Olá {{cliente}}! Você tem uma cobrança de {{valor}} referente a "{{descricao}}", com vencimento em {{vencimento}}. ' +
       'Pague com facilidade pelo link: {{linkPagamento}}',
-    providerTemplateName: 'cobranca_validamed',
+    providerTemplateName: 'cobranca_cecim',
   },
   {
     channel: Channel.WHATSAPP,
@@ -27,7 +27,7 @@ const DEFAULT_TEMPLATES: Array<{
     body:
       'Olá {{cliente}}, passando para lembrar que sua cobrança de {{valor}} ("{{descricao}}") vence em {{vencimento}}. ' +
       'Evite juros pagando agora: {{linkPagamento}}',
-    providerTemplateName: 'lembrete_vencimento_validamed',
+    providerTemplateName: 'lembrete_vencimento_cecim',
   },
   {
     channel: Channel.WHATSAPP,
@@ -36,31 +36,31 @@ const DEFAULT_TEMPLATES: Array<{
     body:
       'Olá {{cliente}}, identificamos que a cobrança de {{valor}} ("{{descricao}}") venceu em {{vencimento}} e continua em aberto. ' +
       'Regularize agora: {{linkPagamento}}',
-    providerTemplateName: 'cobranca_vencida_validamed',
+    providerTemplateName: 'cobranca_vencida_cecim',
   },
   {
     channel: Channel.SMS,
     type: TemplateType.COBRANCA_PENDENTE,
     name: 'SMS - Cobrança pendente',
-    body: 'ValidaMed: cobranca de {{valor}} ref. {{descricao}}, vence {{vencimento}}. Pague: {{linkPagamento}}',
+    body: 'CECIM: cobranca de {{valor}} ref. {{descricao}}, vence {{vencimento}}. Pague: {{linkPagamento}}',
   },
   {
     channel: Channel.SMS,
     type: TemplateType.LEMBRETE_VENCIMENTO,
     name: 'SMS - Lembrete de vencimento',
-    body: 'ValidaMed: lembrete - cobranca de {{valor}} vence {{vencimento}}. Pague: {{linkPagamento}}',
+    body: 'CECIM: lembrete - cobranca de {{valor}} vence {{vencimento}}. Pague: {{linkPagamento}}',
   },
   {
     channel: Channel.SMS,
     type: TemplateType.COBRANCA_VENCIDA,
     name: 'SMS - Cobrança vencida',
-    body: 'ValidaMed: cobranca de {{valor}} venceu em {{vencimento}} e segue em aberto. Regularize: {{linkPagamento}}',
+    body: 'CECIM: cobranca de {{valor}} venceu em {{vencimento}} e segue em aberto. Regularize: {{linkPagamento}}',
   },
   {
     channel: Channel.EMAIL,
     type: TemplateType.COBRANCA_PENDENTE,
     name: 'E-mail - Cobrança pendente',
-    subject: 'Cobrança ValidaMed - {{descricao}}',
+    subject: 'Cobrança CECIM - {{descricao}}',
     body:
       '<p>Olá {{cliente}},</p>' +
       '<p>Você possui uma cobrança no valor de <strong>{{valor}}</strong> referente a <strong>{{descricao}}</strong>, ' +
@@ -93,7 +93,7 @@ const DEFAULT_TEMPLATES: Array<{
 ];
 
 async function main() {
-  const adminEmail = process.env.SEED_ADMIN_EMAIL ?? 'admin@validamed.com.br';
+  const adminEmail = process.env.SEED_ADMIN_EMAIL ?? 'admin@cecim.com.br';
   const adminPassword = process.env.SEED_ADMIN_PASSWORD ?? 'troque-esta-senha';
 
   const passwordHash = await bcrypt.hash(adminPassword, 10);
