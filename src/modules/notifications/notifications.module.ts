@@ -18,6 +18,7 @@ import { EmailSmtpProvider } from './providers/email-smtp.provider';
           host: config.get<string>('redis.host'),
           port: config.get<number>('redis.port'),
           password: config.get<string>('redis.password'),
+          tls: config.get<boolean>('redis.tls') ? {} : undefined,
         },
       }),
     }),
