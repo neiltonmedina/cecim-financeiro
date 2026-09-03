@@ -136,6 +136,20 @@ async function main() {
     }
   }
   console.log('Regras de lembrete padrão garantidas.');
+
+  const existingPolicy = await prisma.negotiationPolicy.findFirst({ where: { active: true } });
+  if (!existingPolicy) {
+    await prisma.negotiationPolicy.create({
+      data: {
+        name: 'Política padrão de negociação',
+        active: true,
+        maxDiscountPercent: 10,
+        maxInstallments: 3,
+        notes: 'Desconto de até 10% apenas para pagamento à vista. Parcelamento em até 3x sem desconto.',
+      },
+    });
+    console.log('Política de negociação padrão criada (ajuste em NegotiationPolicy conforme sua empresa).');
+  }
 }
 
 main()

@@ -45,6 +45,7 @@ model Client {
   updatedAt      DateTime @updatedAt
 
   charges       Charge[]
+  conversations Conversation[]
 
   @@index([name])
 }
@@ -75,6 +76,8 @@ model Charge {
   canceledAt    DateTime?
 
   notifications NotificationLog[]
+  conversations Conversation[]
+  agreements    Agreement[]
 
   @@index([status])
   @@index([dueDate])
@@ -145,4 +148,98 @@ model ReminderRule {
   templateType TemplateType
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())
+}
+
+// ==========================================================
+// Agente de cobrança conversacional (WhatsApp)
+// ==========================================================
+
+enum ConversationStage {
+  INICIADA             // 1ª mensagem enviada
+  LEMBRETE_ENVIADO      // 2º contato (sem resposta ao 1º)
+  TERCEIRA_TENTATIVA    // 3º contato, oferece negociação
+  NEGOCIACAO            // cliente pediu negociação, em andamento
+  AGUARDANDO_PAGAMENTO  // cliente avisou que vai pagar / já pagou, aguardando confirmação
+  AGUARDANDO_HUMANO     // escalado, automação pausada
+  ENCERRADA             // fim do fluxo automático (sem resposta após 3 tentativas, ou resolvido)
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+// Classificação da intenção da mensagem do cliente, feita pelo agente (Claude)
+enum MessageIntent {
+  JA_PAGOU
+  VAI_PAGAR
+  DATA_ESPECIFICA
+  QUER_NEGOCIAR
+  NAO_RECONHECE
+  NAO_PODE_PAGAR
+  PEDIU_BOLETO_PIX
+  QUER_HUMANO
+  OUTRO
+}
+
+// Uma conversa de cobrança por WhatsApp, vinculada a um cliente e (quando aplicável) a uma cobrança
+model Conversation {
+  id             String            @id @default(uuid())
+  client         Client            @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  clientId       String
+  charge         Charge?           @relation(fields: [chargeId], references: [id], onDelete: SetNull)
+  chargeId       String?
+  stage          ConversationStage @default(INICIADA)
+  humanRequested Boolean           @default(false)
+  attemptCount   Int               @default(1)
+  lastInboundAt  DateTime?
+  lastOutboundAt DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  messages   ConversationMessage[]
+  agreements Agreement[]
+
+  @@index([clientId])
+  @@index([stage])
+}
+
+// Cada mensagem trocada (entrada do cliente ou saída do agente) dentro de uma conversa
+model ConversationMessage {
+  id             String            @id @default(uuid())
+  conversation   Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId String
+  direction      MessageDirection
+  channel        Channel
+  content        String
+  intent         MessageIntent?
+  createdAt      DateTime          @default(now())
+
+  @@index([conversationId])
+}
+
+// Política de negociação autorizada pela empresa - o agente NUNCA pode oferecer
+// condições fora daqui. Mantemos um único registro ativo por padrão.
+model NegotiationPolicy {
+  id                 String   @id @default(uuid())
+  name               String
+  active             Boolean  @default(true)
+  maxDiscountPercent Int      @default(0)
+  maxInstallments    Int      @default(1)
+  notes              String? // condições adicionais em texto livre, ex: "só à vista tem desconto"
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+// Acordo/negociação confirmado com o cliente durante a conversa
+model Agreement {
+  id             String       @id @default(uuid())
+  charge         Charge       @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+  chargeId       String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId String
+  terms          String // descrição do acordo em texto (ex: "10% de desconto, pagamento até dia 20")
+  discountPercent Int?
+  installments    Int?
+  confirmedAt    DateTime     @default(now())
 }

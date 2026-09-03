@@ -24,6 +24,6 @@ import { EmailSmtpProvider } from './providers/email-smtp.provider';
     }),
   ],
   providers: [NotificationsService, NotificationsProcessor, WhatsAppProvider, SmsTwilioProvider, EmailSmtpProvider],
-  exports: [NotificationsService],
+  exports: [NotificationsService, WhatsAppProvider, EmailSmtpProvider],
 })
 export class NotificationsModule {}

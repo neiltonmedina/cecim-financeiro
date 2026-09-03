@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import { ChargeStatus, TemplateType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ConversationsService } from '../conversations/conversations.service';
 import { CreateChargeDto } from './dto/create-charge.dto';
 import { CreateBulkChargesDto } from './dto/create-bulk-charges.dto';
 import { DispatchChargesDto } from './dto/dispatch-charges.dto';
@@ -11,6 +12,7 @@ export class ChargesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
+    private readonly conversationsService: ConversationsService,
   ) {}
 
   create(dto: CreateChargeDto, createdBy?: string) {
@@ -89,9 +91,18 @@ export class ChargesService {
     }
 
     const templateType = dto.templateType ?? TemplateType.COBRANCA_PENDENTE;
-    return this.notificationsService.dispatchCharges(dto.chargeIds, {
+    const results = await this.notificationsService.dispatchCharges(dto.chargeIds, {
       channels: dto.channels,
       templateType,
     });
+
+    // Para os disparos que incluíram WhatsApp, abre a conversa do agente de cobrança.
+    for (const result of results) {
+      if (result.channelsQueued.includes('WHATSAPP')) {
+        await this.conversationsService.ensureConversationForCharge(result.clientId, result.chargeId);
+      }
+    }
+
+    return results;
   }
 }

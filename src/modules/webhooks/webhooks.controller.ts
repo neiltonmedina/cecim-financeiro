@@ -3,6 +3,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { Response } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ConversationsService } from '../conversations/conversations.service';
 
 /** Mapeia os status de entrega da Meta para o enum interno de NotificationLog. */
 const WHATSAPP_STATUS_MAP: Record<string, 'SENT' | 'DELIVERED' | 'READ' | 'FAILED'> = {
@@ -28,6 +29,7 @@ export class WebhooksController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly conversations: ConversationsService,
   ) {}
 
   /** Verificação do webhook exigida pela Meta ao cadastrar a URL no App do WhatsApp. */
@@ -45,7 +47,10 @@ export class WebhooksController {
     throw new BadRequestException('Token de verificação inválido');
   }
 
-  /** Recebe status de entrega/leitura das mensagens de WhatsApp enviadas. */
+  /**
+   * Recebe status de entrega/leitura das mensagens enviadas, e também as
+   * mensagens recebidas dos clientes - que alimentam o agente de cobrança.
+   */
   @Post('whatsapp')
   async receiveWhatsAppEvent(@Body() body: any) {
     const entries = body?.entry ?? [];
@@ -54,6 +59,17 @@ export class WebhooksController {
         const statuses = change.value?.statuses ?? [];
         for (const status of statuses) {
           await this.applyWhatsAppStatus(status.id, status.status, status.errors?.[0]?.title);
+        }
+
+        const messages = change.value?.messages ?? [];
+        for (const message of messages) {
+          const text = message.text?.body;
+          if (message.from && text) {
+            // Processado de forma assíncrona: a Meta espera resposta rápida do webhook.
+            this.conversations.handleInboundWhatsApp(message.from, text).catch((err) => {
+              this.logger.error(`Erro ao processar mensagem do agente: ${err.message}`);
+            });
+          }
         }
       }
     }

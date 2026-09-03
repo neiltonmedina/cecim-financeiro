@@ -19,7 +19,55 @@ número de celular ("chip") novo contratado para a operação.
   cobrança automática X dias após vencer.
 - **Webhooks de status de entrega**: WhatsApp (Meta) e SMS (Twilio)
   atualizam o status (enviado/entregue/lido/falhou) de cada notificação.
+- **Agente de cobrança conversacional (WhatsApp + IA)**: quando o cliente
+  responde, o sistema identifica a intenção (já pagou, vai negociar, quer
+  falar com humano, etc.), responde em linguagem natural respeitando um tom
+  profissional e as condições de negociação autorizadas, e **escala para um
+  humano automaticamente** em situações sensíveis (veja seção própria abaixo).
 - Autenticação via **JWT** para proteger a API.
+
+## Agente de cobrança conversacional (WhatsApp)
+
+Quando uma cobrança é disparada por WhatsApp, o sistema abre uma
+**conversa** (`Conversation`) para aquele cliente. Toda resposta do cliente
+chega pelo webhook (`POST /webhooks/whatsapp`) e é processada assim:
+
+1. O sistema identifica o cliente pelo telefone e localiza a cobrança em aberto.
+2. A mensagem é enviada para o **Claude** (Anthropic), com instruções fixas de
+   tom (educado, profissional, sem ameaças) e as **condições de negociação
+   autorizadas** (`NegotiationPolicy` no banco — desconto máximo, parcelas
+   máximas). O agente nunca inventa valores fora dessas condições.
+3. O agente classifica a intenção (`JA_PAGOU`, `VAI_PAGAR`, `QUER_NEGOCIAR`,
+   `NAO_RECONHECE`, `QUER_HUMANO`, etc.) e gera a resposta.
+4. Se a intenção exigir atenção humana (cliente pede humano, não reconhece a
+   cobrança, ou algo fora do que o agente pode resolver com segurança), a
+   conversa é marcada `AGUARDANDO_HUMANO`, a **automação para** naquela
+   conversa, e um e-mail é enviado para `ESCALATION_EMAIL`.
+5. Sem resposta do cliente, uma rotina diária avança o fluxo automaticamente:
+   1ª mensagem → lembrete (48h depois) → 3ª tentativa oferecendo negociação
+   (mais 48h) → encerra o fluxo automático (evita excesso de mensagens).
+
+**Configuração necessária:**
+- `ANTHROPIC_API_KEY` — chave da API da Anthropic (console.anthropic.com).
+- `ESCALATION_EMAIL` — e-mail que recebe o aviso de encaminhamento humano.
+- Ajuste a tabela `NegotiationPolicy` (via `/docs` ou diretamente no banco)
+  com o desconto/parcelamento que sua empresa realmente autoriza.
+- No app do WhatsApp na Meta, o webhook precisa estar inscrito também no
+  campo **`messages`** (não só `message_status`), para receber as respostas
+  dos clientes.
+
+**Endpoints úteis:**
+- `GET /conversations` — lista conversas (filtro `?humanRequested=true` para
+  ver só as que precisam de atendimento humano).
+- `GET /conversations/:id` — histórico completo de uma conversa.
+- `GET /reports/cobranca?from=2026-09-01&to=2026-09-30` — relatório com
+  clientes contatados, que responderam, acordos, pagamentos confirmados,
+  pedidos de negociação, encaminhados para humano, sem resposta e valor
+  recuperado.
+
+**Teste com um grupo pequeno primeiro**: como `POST /charges/dispatch`
+recebe uma lista de `chargeIds`, basta selecionar poucos clientes por vez
+(ex: 3-5) para testar o fluxo do agente antes de disparar para toda a base.
 
 ## Arquitetura / stack
 

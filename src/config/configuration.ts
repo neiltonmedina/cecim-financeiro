@@ -27,6 +27,10 @@ export default () => ({
     fromNumber: process.env.TWILIO_FROM_NUMBER ?? '',
     statusCallbackUrl: process.env.TWILIO_STATUS_CALLBACK_URL ?? '',
   },
+  anthropic: {
+    apiKey: process.env.ANTHROPIC_API_KEY ?? '',
+  },
+  escalationEmail: process.env.ESCALATION_EMAIL ?? '',
   smtp: {
     host: process.env.SMTP_HOST ?? '',
     port: parseInt(process.env.SMTP_PORT ?? '587', 10),
