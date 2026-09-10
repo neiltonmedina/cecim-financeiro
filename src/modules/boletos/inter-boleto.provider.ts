@@ -66,7 +66,9 @@ export class InterBoletoProvider {
       client_id: cfg.clientId,
       client_secret: cfg.clientSecret,
       grant_type: 'client_credentials',
-      scope: 'boleto-cobranca.read boleto-cobranca.write',
+      // Escopos de webhook incluídos aqui também - não afeta a emissão de boleto,
+      // só amplia o que o token pode fazer (necessário para registrar o webhook de pagamento).
+      scope: 'boleto-cobranca.read boleto-cobranca.write webhook-cobranca.read webhook-cobranca.write',
     });
 
     const response = await this.getClient().post<InterTokenResponse>('/oauth/v2/token', params.toString(), {
@@ -155,5 +157,31 @@ export class InterBoletoProvider {
     }
 
     return { codigoSolicitacao, pdfBase64, pixCopiaECola };
+  }
+
+  /**
+   * Registra a URL de callback de pagamento no Inter (uma vez só, configuração
+   * inicial). Se o Inter já tiver outra URL registrada, isso a substitui.
+   *
+   * ⚠️ Endpoint baseado no padrão documentado da API de Cobrança do Inter -
+   * se retornar 404/400, o corpo da resposta normalmente indica o formato
+   * esperado; encaminhe o erro para ajuste.
+   */
+  async registrarWebhook(webhookUrl: string): Promise<void> {
+    const token = await this.getAccessToken();
+    await this.getClient().put(
+      '/cobranca/v3/cobrancas/webhook',
+      { webhookUrl },
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+  }
+
+  /** Consulta a URL de webhook atualmente registrada no Inter. */
+  async consultarWebhook(): Promise<unknown> {
+    const token = await this.getAccessToken();
+    const response = await this.getClient().get('/cobranca/v3/cobrancas/webhook', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return response.data;
   }
 }

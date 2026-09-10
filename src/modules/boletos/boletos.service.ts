@@ -18,6 +18,25 @@ export class BoletosService {
     return this.inter.isConfigured();
   }
 
+  /** Registra no Inter a URL de callback que recebe a confirmação de pagamento. */
+  async registrarWebhookPagamento() {
+    if (!this.inter.isConfigured()) {
+      throw new Error('Integração com o Inter não configurada.');
+    }
+    const appUrl = this.config.get<string>('appUrl');
+    const webhookUrl = `${appUrl}/webhooks/inter/cobranca`;
+    await this.inter.registrarWebhook(webhookUrl);
+    return { webhookUrl, registrado: true };
+  }
+
+  /** Consulta qual URL de webhook está registrada hoje no Inter. */
+  async consultarWebhookPagamento() {
+    if (!this.inter.isConfigured()) {
+      throw new Error('Integração com o Inter não configurada.');
+    }
+    return this.inter.consultarWebhook();
+  }
+
   /**
    * Gera o boleto no Inter para a cobrança e salva o link interno
    * (que serve o PDF) no campo paymentLink. Nunca lança erro para quem
