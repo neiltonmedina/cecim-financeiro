@@ -42,9 +42,12 @@
     "nodemailer": "^6.9.15",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
+    "prisma": "^5.20.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "twilio": "^5.3.0"
+    "ts-node": "^10.9.2",
+    "twilio": "^5.3.0",
+    "typescript": "^5.6.2"
   },
   "devDependencies": {
     "@nestjs/cli": "^10.4.5",
@@ -61,13 +64,10 @@
     "eslint": "^8.57.1",
     "jest": "^29.7.0",
     "prettier": "^3.3.3",
-    "prisma": "^5.20.0",
     "source-map-support": "^0.5.21",
     "ts-jest": "^29.2.5",
     "ts-loader": "^9.5.1",
-    "ts-node": "^10.9.2",
-    "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.6.2"
+    "tsconfig-paths": "^4.2.0"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
