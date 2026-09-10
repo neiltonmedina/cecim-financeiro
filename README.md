@@ -26,6 +26,17 @@ número de celular ("chip") novo contratado para a operação.
   humano automaticamente** em situações sensíveis (veja seção própria abaixo).
 - Autenticação via **JWT** para proteger a API.
 
+## Controle operacional: o painel é a única interface (sem disparo automático não supervisionado)
+
+A partir deste ajuste, **nenhum disparo acontece sem seleção manual e confirmação explícita no painel**. Resumo das regras:
+
+1. **Seleção manual obrigatória**: o disparo (`POST /charges/dispatch`) só é aceito com `confirmado: true` no corpo da requisição - o painel exige que o operador selecione as cobranças (checkboxes) e clique em "Confirmar e disparar" antes de chamar esse endpoint. Sem isso, a API rejeita a chamada (`400 Bad Request`).
+2. **Intervalo configurável**: ao confirmar a campanha, o operador escolhe o intervalo entre contatos da régua - **3, 5 ou 10 dias** (campo `intervalDays`). Esse valor fica salvo na conversa (`Conversation.intervalDays`) e é o que a rotina diária usa para decidir quando avançar pro próximo contato (lembrete → 3ª tentativa → encerramento). Não existe mais um intervalo fixo de 48h.
+3. **Abordagem objetiva**: as mensagens agora informam os dias em atraso (`{{diasAtraso}}`) e oferecem duas opções fechadas - responder **1** para receber o Pix, ou **2** para o boleto atualizado. Essas duas respostas são tratadas de forma **determinística no backend** (sem IA) - o sistema apenas busca o Pix/link já prontos da cobrança e envia; qualquer outra mensagem do cliente (negociação, dúvidas, etc.) segue pro agente de IA normalmente.
+4. **Valores sempre vêm do Inter, nunca calculados pela IA**: o boleto (com multa e juros já aplicados) e o Pix são obtidos da API do Banco Inter no momento da criação da cobrança. Nem o agente de IA nem nenhuma outra parte do sistema recalcula esses valores - eles só repassam o que o Inter já forneceu.
+5. **Encerramento automático por pagamento**: um novo webhook (`POST /webhooks/inter/cobranca`) recebe a confirmação de pagamento do Inter e automaticamente marca a cobrança como **Paga** e encerra a régua/conversa daquele cliente - sem precisar de nenhuma ação manual. (⚠️ é necessário registrar essa URL de callback no Inter; o formato exato do payload deve ser validado nesse cadastro - o parser aceita as variações mais comuns de nome de campo).
+6. **Painel como única interface de operação**: todo o controle - status das cobranças, histórico completo de mensagens, respostas dos clientes, pagamentos confirmados e **pausa manual** da régua de qualquer conversa - é feito exclusivamente pelo painel web (`/painel`). Não há (nem deve haver) operação paralela via WhatsApp Desktop/Web: o número de WhatsApp usado pela empresa é exclusivo da API oficial (Cloud API) que o sistema controla - conectar esse mesmo número num app/WhatsApp Web quebraria a automação (veja a seção de configuração do WhatsApp abaixo). A pausa manual (`PATCH /conversations/:id/pause`) permite ao operador congelar uma conversa específica a qualquer momento, direto pelo botão "Pausar automação" no histórico da conversa.
+
 ## Emissão automática de boleto (Banco Inter)
 
 Se configurado, toda cobrança criada (`POST /charges` ou `/charges/bulk`)

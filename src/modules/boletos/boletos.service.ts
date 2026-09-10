@@ -29,13 +29,14 @@ export class BoletosService {
       return charge;
     }
     try {
-      const { codigoSolicitacao, pdfBase64 } = await this.inter.createBoleto(charge, client);
+      const { codigoSolicitacao, pdfBase64, pixCopiaECola } = await this.inter.createBoleto(charge, client);
       const appUrl = this.config.get<string>('appUrl');
       return this.prisma.charge.update({
         where: { id: charge.id },
         data: {
           boletoCodigoSolicitacao: codigoSolicitacao,
           boletoPdfBase64: pdfBase64,
+          pixCopiaECola: pixCopiaECola ?? null,
           boletoErro: null,
           paymentLink: `${appUrl}/boletos/${charge.id}`,
           externalRef: codigoSolicitacao,

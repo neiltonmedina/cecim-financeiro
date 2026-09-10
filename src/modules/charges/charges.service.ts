@@ -93,6 +93,12 @@ export class ChargesService {
    * E-mail — para os clientes selecionados via IDs de cobrança.
    */
   async dispatch(dto: DispatchChargesDto) {
+    if (!dto.confirmado) {
+      throw new BadRequestException(
+        'É necessário confirmar explicitamente a campanha (confirmado: true) antes de disparar - seleção manual é obrigatória.',
+      );
+    }
+
     const charges = await this.prisma.charge.findMany({ where: { id: { in: dto.chargeIds } } });
     if (charges.length !== dto.chargeIds.length) {
       throw new NotFoundException('Uma ou mais cobranças informadas não foram encontradas');
@@ -106,15 +112,17 @@ export class ChargesService {
     }
 
     const templateType = dto.templateType ?? TemplateType.COBRANCA_PENDENTE;
+    const intervalDays = dto.intervalDays ?? 5;
     const results = await this.notificationsService.dispatchCharges(dto.chargeIds, {
       channels: dto.channels,
       templateType,
     });
 
-    // Para os disparos que incluíram WhatsApp, abre a conversa do agente de cobrança.
+    // Para os disparos que incluíram WhatsApp, abre a conversa do agente de cobrança
+    // já com o intervalo da régua definido no painel.
     for (const result of results) {
       if (result.channelsQueued.includes('WHATSAPP')) {
-        await this.conversationsService.ensureConversationForCharge(result.clientId, result.chargeId);
+        await this.conversationsService.ensureConversationForCharge(result.clientId, result.chargeId, intervalDays);
       }
     }
 

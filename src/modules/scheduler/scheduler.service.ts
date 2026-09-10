@@ -43,17 +43,16 @@ export class SchedulerService {
 
   /**
    * Avança o fluxo de conversas do agente de cobrança que ficaram sem resposta:
-   * 1ª mensagem -> lembrete -> 3ª tentativa (oferece negociação) -> encerra (sem spam).
-   * Nunca mexe em conversas já escaladas para humano.
+   * 1ª mensagem -> lembrete -> 3ª tentativa (oferece opções fechadas) -> encerra (sem spam).
+   * O intervalo entre cada contato é o definido no painel ao confirmar a campanha
+   * (Conversation.intervalDays). Nunca mexe em conversas escaladas para humano ou pausadas.
    */
   private async advanceStaleConversations() {
-    const staleThreshold = new Date(Date.now() - 48 * 60 * 60 * 1000); // 48h sem resposta
-
     const conversations = await this.prisma.conversation.findMany({
       where: {
         humanRequested: false,
+        paused: false,
         stage: { in: ['INICIADA', 'LEMBRETE_ENVIADO', 'TERCEIRA_TENTATIVA'] },
-        lastOutboundAt: { lt: staleThreshold },
       },
       include: { client: true, charge: true },
     });
@@ -62,6 +61,10 @@ export class SchedulerService {
       // Se o cliente respondeu depois do último envio, não é "sem resposta" - ignora.
       if (conv.lastInboundAt && conv.lastInboundAt > (conv.lastOutboundAt ?? new Date(0))) continue;
       if (!conv.client.phoneE164) continue;
+      if (!conv.lastOutboundAt) continue;
+
+      const staleThreshold = new Date(conv.lastOutboundAt.getTime() + conv.intervalDays * 24 * 60 * 60 * 1000);
+      if (new Date() < staleThreshold) continue; // ainda dentro do intervalo configurado, aguarda
 
       if (conv.stage === 'TERCEIRA_TENTATIVA') {
         await this.prisma.conversation.update({ where: { id: conv.id }, data: { stage: 'ENCERRADA' } });
@@ -69,15 +72,21 @@ export class SchedulerService {
         continue;
       }
 
+      const diasAtraso = conv.charge
+        ? Math.max(0, Math.floor((Date.now() - conv.charge.dueDate.getTime()) / (24 * 60 * 60 * 1000)))
+        : null;
+      const opcoes = 'Responda *1* para receber o Pix ou *2* para o boleto atualizado (já com os valores corretos).';
+      const situacaoAtraso = diasAtraso !== null ? ` Está ${diasAtraso} dia(s) em atraso.` : '';
+
       const nextStage = conv.stage === 'INICIADA' ? 'LEMBRETE_ENVIADO' : 'TERCEIRA_TENTATIVA';
       const message =
         nextStage === 'LEMBRETE_ENVIADO'
-          ? `Olá ${conv.client.name}, passando para saber se você viu nossa mensagem sobre ${
+          ? `Olá ${conv.client.name}, passando para lembrar sobre ${
               conv.charge?.description ?? 'sua cobrança em aberto'
-            }. Qualquer dúvida, estou à disposição.`
-          : `Olá ${conv.client.name}, ainda estamos à disposição para resolver ${
-              conv.charge?.description ?? 'sua cobrança em aberto'
-            }. Se preferir, podemos conversar sobre condições para regularizar - é só me responder aqui.`;
+            }.${situacaoAtraso} ${opcoes}`
+          : `Olá ${conv.client.name}, sua cobrança sobre ${
+              conv.charge?.description ?? ''
+            } segue em aberto.${situacaoAtraso} ${opcoes} Se preferir negociar, me avise por aqui.`;
 
       try {
         await this.whatsapp.send({ destination: conv.client.phoneE164, body: message });

@@ -168,6 +168,19 @@
           </select>
           <button class="secondary" onclick="loadCharges()">Atualizar</button>
         </div>
+
+        <div id="campaign-bar" style="display:flex; align-items:center; gap:10px; margin-bottom:14px; padding:10px 12px; background:#eef2ff; border-radius:8px; flex-wrap:wrap;">
+          <strong id="campaign-count" style="font-size:13px;">0 selecionada(s)</strong>
+          <label style="font-size:13px; color:var(--muted);">Intervalo entre contatos:</label>
+          <select id="campaign-interval">
+            <option value="3">3 dias</option>
+            <option value="5" selected>5 dias</option>
+            <option value="10">10 dias</option>
+          </select>
+          <button onclick="confirmarCampanha()">Confirmar e disparar</button>
+          <span style="font-size:12px; color:var(--muted);">O disparo só ocorre após você confirmar aqui - nada é enviado sozinho.</span>
+        </div>
+
         <div id="charges-content" class="loading">Carregando...</div>
       </div>
     </div>
@@ -289,10 +302,23 @@ function switchTab(name) {
   }
 }
 
+let selectedChargeIds = new Set();
+
+function updateCampaignCount() {
+  document.getElementById('campaign-count').textContent = selectedChargeIds.size + ' selecionada(s)';
+}
+
+function toggleChargeSelection(id, checked) {
+  if (checked) selectedChargeIds.add(id); else selectedChargeIds.delete(id);
+  updateCampaignCount();
+}
+
 async function loadCharges() {
   const el = document.getElementById('charges-content');
   el.innerHTML = '<div class="loading">Carregando...</div>';
   const status = document.getElementById('charge-status-filter').value;
+  selectedChargeIds = new Set();
+  updateCampaignCount();
   try {
     const qs = status ? '?status=' + status : '';
     const charges = await api('/charges' + qs);
@@ -300,9 +326,11 @@ async function loadCharges() {
       el.innerHTML = '<div class="empty">Nenhuma cobrança encontrada.</div>';
       return;
     }
-    let html = '<table><thead><tr><th>Cliente</th><th>Descrição</th><th>Valor</th><th>Vencimento</th><th>Status</th></tr></thead><tbody>';
+    let html = '<table><thead><tr><th></th><th>Cliente</th><th>Descrição</th><th>Valor</th><th>Vencimento</th><th>Status</th></tr></thead><tbody>';
     for (const c of charges) {
+      const disabled = (c.status === 'PAGA' || c.status === 'CANCELADA') ? 'disabled' : '';
       html += `<tr>
+        <td><input type="checkbox" ${disabled} onchange="toggleChargeSelection('${c.id}', this.checked)" /></td>
         <td>${c.client?.name ?? '-'}</td>
         <td>${c.description}</td>
         <td>${fmtMoney(c.amountCents)}</td>
@@ -314,6 +342,34 @@ async function loadCharges() {
     el.innerHTML = html;
   } catch (e) {
     el.innerHTML = '<div class="empty">' + e.message + '</div>';
+  }
+}
+
+async function confirmarCampanha() {
+  if (!selectedChargeIds.size) {
+    alert('Selecione ao menos uma cobrança antes de disparar.');
+    return;
+  }
+  const intervalDays = Number(document.getElementById('campaign-interval').value);
+  const ok = confirm(
+    `Confirma o disparo da campanha para ${selectedChargeIds.size} cliente(s) selecionado(s), ` +
+    `com intervalo de ${intervalDays} dias entre os contatos?`
+  );
+  if (!ok) return;
+
+  try {
+    const result = await api('/charges/dispatch', {
+      method: 'POST',
+      body: JSON.stringify({
+        chargeIds: Array.from(selectedChargeIds),
+        intervalDays,
+        confirmado: true,
+      }),
+    });
+    alert('Campanha disparada com sucesso para ' + result.length + ' cobrança(s).');
+    loadCharges();
+  } catch (e) {
+    alert('Erro ao disparar campanha: ' + e.message);
   }
 }
 
@@ -334,7 +390,7 @@ async function loadConversations() {
         <td>${c.client?.name ?? '-'}</td>
         <td>${c.charge?.description ?? '-'}</td>
         <td><span class="badge ${c.stage}">${c.stage.replaceAll('_', ' ')}</span></td>
-        <td>${c.humanRequested ? '<span class="human-flag">⚠ precisa de humano</span>' : '-'}</td>
+        <td>${c.humanRequested ? '<span class="human-flag">⚠ precisa de humano</span>' : (c.paused ? '<span class="human-flag">⏸ pausada</span>' : '-')}</td>
         <td>${fmtDateTime(c.updatedAt)}</td>
       </tr>`;
     }
@@ -356,6 +412,7 @@ async function openConversation(id) {
         ${conv.charge?.description ?? 'Sem cobrança vinculada'} —
         <span class="badge ${conv.stage}">${conv.stage.replaceAll('_', ' ')}</span>
         ${conv.humanRequested ? ' <span class="human-flag">⚠ aguardando humano</span>' : ''}
+        ${conv.paused ? ' <span class="human-flag">⏸ pausada manualmente</span>' : ''}
       </p><hr/>`;
     if (!conv.messages.length) {
       html += '<div class="empty">Nenhuma mensagem trocada ainda.</div>';
@@ -367,10 +424,23 @@ async function openConversation(id) {
         </div>`;
       }
     }
-    html += '<div style="text-align:right; margin-top:16px;"><button class="secondary" onclick="closeModal()">Fechar</button></div>';
+    html += `<div style="text-align:right; margin-top:16px; display:flex; justify-content:flex-end; gap:8px;">
+      <button class="secondary" onclick="togglePause('${conv.id}', ${!conv.paused})">${conv.paused ? 'Retomar automação' : 'Pausar automação'}</button>
+      <button class="secondary" onclick="closeModal()">Fechar</button>
+    </div>`;
     modal.innerHTML = html;
   } catch (e) {
     modal.innerHTML = '<div class="empty">' + e.message + '</div>';
+  }
+}
+
+async function togglePause(id, paused) {
+  try {
+    await api('/conversations/' + id + '/pause', { method: 'PATCH', body: JSON.stringify({ paused }) });
+    openConversation(id);
+    loadConversations();
+  } catch (e) {
+    alert('Erro ao ' + (paused ? 'pausar' : 'retomar') + ': ' + e.message);
   }
 }
 

@@ -1,4 +1,4 @@
-import { ArrayMinSize, IsArray, IsEnum, IsOptional, IsUUID } from 'class-validator';
+import { ArrayMinSize, IsArray, IsBoolean, IsEnum, IsIn, IsOptional, IsUUID } from 'class-validator';
 import { Channel, TemplateType } from '@prisma/client';
 
 export class DispatchChargesDto {
@@ -17,4 +17,20 @@ export class DispatchChargesDto {
   @IsOptional()
   @IsEnum(TemplateType)
   templateType?: TemplateType;
+
+  /**
+   * Intervalo (em dias) entre os contatos da régua de cobrança (lembrete,
+   * 3ª tentativa, etc.), definido no painel antes de confirmar o disparo
+   * da campanha. Valores permitidos: 3, 5 ou 10 dias.
+   */
+  @IsOptional()
+  @IsIn([3, 5, 10])
+  intervalDays?: number;
+
+  /**
+   * Confirmação explícita da campanha - o painel deve exigir essa marcação
+   * antes de chamar o disparo. Sem isso, nada é enviado.
+   */
+  @IsBoolean()
+  confirmado: boolean;
 }

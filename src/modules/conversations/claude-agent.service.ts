@@ -92,6 +92,11 @@ export class ClaudeAgentService {
       `- NUNCA invente descontos, valores, prazos ou condições fora do que está definido acima.`,
       `- Se o cliente pedir algo fora dessas condições, explique que não pode autorizar e ofereça encaminhar para um atendente (requestHumanHandoff = true).`,
       ``,
+      `VALORES E JUROS/MULTA - REGRA CRÍTICA:`,
+      `- Você NUNCA calcula multa, juros ou valor atualizado. O valor informado no contexto da cobrança já vem` +
+        ` pronto do banco (Banco Inter), com qualquer multa/juros de atraso já aplicados.`,
+      `- Sempre use exatamente o valor e o link/Pix fornecidos no contexto - nunca estime ou corrija esses números.`,
+      ``,
       `QUANDO ESCALAR PARA HUMANO (requestHumanHandoff = true):`,
       `- Cliente pede explicitamente para falar com uma pessoa/atendente/humano.`,
       `- Cliente diz que não reconhece a cobrança.`,

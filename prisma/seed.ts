@@ -17,7 +17,7 @@ const DEFAULT_TEMPLATES: Array<{
     name: 'WhatsApp - Cobrança pendente',
     body:
       'Olá {{cliente}}! Você tem uma cobrança de {{valor}} referente a "{{descricao}}", com vencimento em {{vencimento}}. ' +
-      'Pague com facilidade pelo link: {{linkPagamento}}',
+      'Responda *1* para receber o Pix ou *2* para o boleto: {{linkPagamento}}',
     providerTemplateName: 'cobranca_cecim',
   },
   {
@@ -26,7 +26,7 @@ const DEFAULT_TEMPLATES: Array<{
     name: 'WhatsApp - Lembrete de vencimento',
     body:
       'Olá {{cliente}}, passando para lembrar que sua cobrança de {{valor}} ("{{descricao}}") vence em {{vencimento}}. ' +
-      'Evite juros pagando agora: {{linkPagamento}}',
+      'Responda *1* para Pix ou *2* para o boleto: {{linkPagamento}}',
     providerTemplateName: 'lembrete_vencimento_cecim',
   },
   {
@@ -34,8 +34,8 @@ const DEFAULT_TEMPLATES: Array<{
     type: TemplateType.COBRANCA_VENCIDA,
     name: 'WhatsApp - Cobrança vencida',
     body:
-      'Olá {{cliente}}, identificamos que a cobrança de {{valor}} ("{{descricao}}") venceu em {{vencimento}} e continua em aberto. ' +
-      'Regularize agora: {{linkPagamento}}',
+      'Olá {{cliente}}, sua cobrança de {{valor}} ("{{descricao}}") está com {{diasAtraso}} dia(s) em atraso (venceu em {{vencimento}}), ' +
+      'já com os valores atualizados. Responda *1* para receber o Pix ou *2* para o boleto atualizado: {{linkPagamento}}',
     providerTemplateName: 'cobranca_vencida_cecim',
   },
   {

@@ -78,6 +78,7 @@ model Charge {
   // Boleto emitido via API do Banco Inter (quando configurado)
   boletoCodigoSolicitacao String?
   boletoPdfBase64         String? @db.Text
+  pixCopiaECola           String? @db.Text // Pix copia-e-cola retornado junto do boleto pelo Inter
   boletoErro              String?
 
   notifications NotificationLog[]
@@ -196,6 +197,12 @@ model Conversation {
   chargeId       String?
   stage          ConversationStage @default(INICIADA)
   humanRequested Boolean           @default(false)
+  // Pausa manual feita pelo operador no painel - enquanto true, nenhum envio automático
+  // (régua) nem resposta do agente acontece; só reativando manualmente.
+  paused         Boolean           @default(false)
+  // Intervalo (em dias) definido no painel ao confirmar o disparo da campanha,
+  // usado para espaçar os contatos da régua (lembrete, 3ª tentativa, etc.)
+  intervalDays   Int               @default(5)
   attemptCount   Int               @default(1)
   lastInboundAt  DateTime?
   lastOutboundAt DateTime?

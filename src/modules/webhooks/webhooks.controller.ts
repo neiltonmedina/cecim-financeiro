@@ -124,4 +124,38 @@ export class WebhooksController {
     await this.prisma.notificationLog.update({ where: { id: log.id }, data });
     return { received: true };
   }
+
+  /**
+   * Recebe a confirmação de pagamento (baixa) do boleto/Pix pelo Banco Inter.
+   * Marca a cobrança como PAGA e encerra automaticamente a régua/conversa
+   * daquele cliente - sem precisar de nenhuma ação manual no painel.
+   *
+   * ⚠️ O formato exato do payload deve ser confirmado ao registrar o webhook
+   * no Inter (o parser abaixo aceita as variações mais comuns: situacao
+   * "RECEBIDO"/"MARCADO_RECEBIDO"/"PAGO" e o codigoSolicitacao em diferentes
+   * posições do corpo).
+   */
+  @Post('inter/cobranca')
+  async receiveInterPaymentEvent(@Body() body: any) {
+    const eventos = Array.isArray(body) ? body : [body];
+    for (const evento of eventos) {
+      const codigoSolicitacao = evento?.codigoSolicitacao ?? evento?.cobranca?.codigoSolicitacao;
+      const situacao: string = (evento?.situacao ?? evento?.cobranca?.situacao ?? '').toUpperCase();
+      const situacoesPagas = ['RECEBIDO', 'MARCADO_RECEBIDO', 'PAGO', 'LIQUIDADO'];
+
+      if (!codigoSolicitacao || !situacoesPagas.includes(situacao)) continue;
+
+      const charge = await this.prisma.charge.findFirst({ where: { boletoCodigoSolicitacao: codigoSolicitacao } });
+      if (!charge) {
+        this.logger.warn(`Webhook do Inter recebido para cobrança desconhecida: ${codigoSolicitacao}`);
+        continue;
+      }
+      if (charge.status === 'PAGA') continue; // já processado antes
+
+      await this.prisma.charge.update({ where: { id: charge.id }, data: { status: 'PAGA', paidAt: new Date() } });
+      await this.conversations.encerrarPorPagamento(charge.id);
+      this.logger.log(`Cobrança ${charge.id} marcada como PAGA via webhook do Inter (${situacao}).`);
+    }
+    return { received: true };
+  }
 }

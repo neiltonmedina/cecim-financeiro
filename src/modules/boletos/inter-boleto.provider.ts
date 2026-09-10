@@ -12,6 +12,7 @@ interface InterTokenResponse {
 export interface InterBoletoResult {
   codigoSolicitacao: string;
   pdfBase64: string;
+  pixCopiaECola?: string;
 }
 
 /**
@@ -144,6 +145,15 @@ export class InterBoletoProvider {
       throw new Error('O boleto foi criado, mas não foi possível obter o PDF.');
     }
 
-    return { codigoSolicitacao, pdfBase64 };
+    // Consulta os detalhes da cobrança para obter o Pix copia-e-cola (quando disponível).
+    let pixCopiaECola: string | undefined;
+    try {
+      const detalhes = await this.getClient().get(`/cobranca/v3/cobrancas/${codigoSolicitacao}`, { headers });
+      pixCopiaECola = detalhes.data?.pix?.pixCopiaECola;
+    } catch (error: any) {
+      this.logger.warn(`Não foi possível obter o Pix da cobrança ${codigoSolicitacao}: ${error.message}`);
+    }
+
+    return { codigoSolicitacao, pdfBase64, pixCopiaECola };
   }
 }
