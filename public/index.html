@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CECIM - Painel de Cobrança</title>
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --card: #ffffff;
+    --text: #1f2430;
+    --muted: #6b7280;
+    --border: #e3e5e9;
+    --primary: #2563eb;
+    --primary-dark: #1d4ed8;
+    --green: #16a34a;
+    --yellow: #d97706;
+    --red: #dc2626;
+    --purple: #7c3aed;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header {
+    background: var(--card);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  header h1 { font-size: 18px; margin: 0; }
+  header .actions { display: flex; gap: 10px; align-items: center; }
+  button {
+    cursor: pointer;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 14px;
+    background: var(--primary);
+    color: white;
+  }
+  button:hover { background: var(--primary-dark); }
+  button.secondary { background: #e5e7eb; color: var(--text); }
+  button.secondary:hover { background: #d1d5db; }
+  input, select {
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    font-size: 14px;
+  }
+
+  #login-screen {
+    max-width: 380px;
+    margin: 80px auto;
+    background: var(--card);
+    padding: 30px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+  }
+  #login-screen h2 { margin-top: 0; }
+  #login-screen label { display: block; margin: 12px 0 4px; font-size: 13px; color: var(--muted); }
+  #login-screen input { width: 100%; }
+  #login-error { color: var(--red); font-size: 13px; margin-top: 10px; min-height: 18px; }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 20px; }
+  nav.tabs { display: flex; gap: 8px; margin-bottom: 18px; }
+  nav.tabs button { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  nav.tabs button.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+    margin-bottom: 18px;
+  }
+  .filters { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
+  tr:hover td { background: #fafafa; }
+  tr.clickable { cursor: pointer; }
+
+  .badge { padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; display: inline-block; }
+  .badge.PENDENTE { background: #fef3c7; color: var(--yellow); }
+  .badge.ENVIADA { background: #dbeafe; color: var(--primary); }
+  .badge.PAGA { background: #dcfce7; color: var(--green); }
+  .badge.VENCIDA { background: #fee2e2; color: var(--red); }
+  .badge.CANCELADA { background: #e5e7eb; color: var(--muted); }
+
+  .badge.INICIADA { background: #dbeafe; color: var(--primary); }
+  .badge.LEMBRETE_ENVIADO { background: #fef3c7; color: var(--yellow); }
+  .badge.TERCEIRA_TENTATIVA { background: #ffedd5; color: #c2410c; }
+  .badge.NEGOCIACAO { background: #ede9fe; color: var(--purple); }
+  .badge.AGUARDANDO_PAGAMENTO { background: #dcfce7; color: var(--green); }
+  .badge.AGUARDANDO_HUMANO { background: #fee2e2; color: var(--red); }
+  .badge.ENCERRADA { background: #e5e7eb; color: var(--muted); }
+
+  .human-flag { color: var(--red); font-weight: 700; }
+
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .kpi { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; text-align: center; }
+  .kpi .value { font-size: 26px; font-weight: 700; }
+  .kpi .label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  #modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    display: none; align-items: center; justify-content: center; padding: 20px;
+  }
+  #modal-overlay.open { display: flex; }
+  #modal {
+    background: var(--card); border-radius: 10px; max-width: 560px; width: 100%;
+    max-height: 80vh; overflow-y: auto; padding: 20px;
+  }
+  #modal h3 { margin-top: 0; }
+  .msg { margin-bottom: 10px; padding: 10px 12px; border-radius: 10px; max-width: 85%; font-size: 14px; }
+  .msg.INBOUND { background: #eef2ff; margin-right: auto; }
+  .msg.OUTBOUND { background: #f0fdf4; margin-left: auto; text-align: right; }
+  .msg .meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .empty { color: var(--muted); text-align: center; padding: 30px 0; }
+  .loading { color: var(--muted); text-align: center; padding: 30px 0; }
+</style>
+</head>
+<body>
+
+<div id="login-screen">
+  <h2>CECIM - Painel de Cobrança</h2>
+  <label>E-mail</label>
+  <input id="login-email" type="email" placeholder="admin@cecim.com.br" />
+  <label>Senha</label>
+  <input id="login-password" type="password" placeholder="••••••••" />
+  <div id="login-error"></div>
+  <button style="width:100%; margin-top:16px;" onclick="doLogin()">Entrar</button>
+</div>
+
+<div id="app" style="display:none;">
+  <header>
+    <h1>CECIM - Painel de Cobrança</h1>
+    <div class="actions">
+      <span id="user-name" style="font-size:13px; color:var(--muted);"></span>
+      <button class="secondary" onclick="logout()">Sair</button>
+    </div>
+  </header>
+
+  <main>
+    <nav class="tabs">
+      <button id="tab-btn-charges" class="active" onclick="switchTab('charges')">Cobranças</button>
+      <button id="tab-btn-conversations" onclick="switchTab('conversations')">Respostas dos Clientes</button>
+      <button id="tab-btn-report" onclick="switchTab('report')">Relatório</button>
+    </nav>
+
+    <div id="tab-charges" class="tab">
+      <div class="card">
+        <div class="filters">
+          <select id="charge-status-filter" onchange="loadCharges()">
+            <option value="">Todos os status</option>
+            <option value="PENDENTE">Pendente</option>
+            <option value="ENVIADA">Enviada</option>
+            <option value="PAGA">Paga</option>
+            <option value="VENCIDA">Vencida</option>
+            <option value="CANCELADA">Cancelada</option>
+          </select>
+          <button class="secondary" onclick="loadCharges()">Atualizar</button>
+        </div>
+        <div id="charges-content" class="loading">Carregando...</div>
+      </div>
+    </div>
+
+    <div id="tab-conversations" class="tab" style="display:none;">
+      <div class="card">
+        <div class="filters">
+          <select id="conv-human-filter" onchange="loadConversations()">
+            <option value="">Todas as conversas</option>
+            <option value="true">Só as que precisam de humano</option>
+          </select>
+          <button class="secondary" onclick="loadConversations()">Atualizar</button>
+        </div>
+        <div id="conversations-content" class="loading">Carregando...</div>
+      </div>
+    </div>
+
+    <div id="tab-report" class="tab" style="display:none;">
+      <div class="card">
+        <div class="filters">
+          <label style="align-self:center; font-size:13px; color:var(--muted);">De</label>
+          <input id="report-from" type="date" />
+          <label style="align-self:center; font-size:13px; color:var(--muted);">até</label>
+          <input id="report-to" type="date" />
+          <button onclick="loadReport()">Gerar relatório</button>
+        </div>
+        <div id="report-content"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div id="modal-overlay" onclick="closeModalOnOverlay(event)">
+  <div id="modal"></div>
+</div>
+
+<script>
+const API = ''; // mesma origem
+let token = localStorage.getItem('cecim_token') || '';
+let userName = localStorage.getItem('cecim_user') || '';
+
+function fmtMoney(cents) {
+  return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+function fmtDate(iso) {
+  if (!iso) return '-';
+  return new Date(iso).toLocaleDateString('pt-BR');
+}
+function fmtDateTime(iso) {
+  if (!iso) return '-';
+  return new Date(iso).toLocaleString('pt-BR');
+}
+
+async function api(path, options = {}) {
+  const res = await fetch(API + path, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: 'Bearer ' + token } : {}),
+      ...(options.headers || {}),
+    },
+  });
+  if (res.status === 401) {
+    logout();
+    throw new Error('Sessão expirada, faça login novamente.');
+  }
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message || 'Erro ao consultar a API (' + res.status + ')');
+  }
+  return res.json();
+}
+
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errorEl = document.getElementById('login-error');
+  errorEl.textContent = '';
+  try {
+    const data = await api('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+    token = data.accessToken;
+    userName = data.user?.name || data.user?.email || email;
+    localStorage.setItem('cecim_token', token);
+    localStorage.setItem('cecim_user', userName);
+    showApp();
+  } catch (e) {
+    errorEl.textContent = 'Login inválido. Confira o e-mail e a senha.';
+  }
+}
+
+function logout() {
+  token = '';
+  localStorage.removeItem('cecim_token');
+  localStorage.removeItem('cecim_user');
+  document.getElementById('app').style.display = 'none';
+  document.getElementById('login-screen').style.display = 'block';
+}
+
+function showApp() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('user-name').textContent = userName;
+  loadCharges();
+}
+
+function switchTab(name) {
+  ['charges', 'conversations', 'report'].forEach((t) => {
+    document.getElementById('tab-' + t).style.display = t === name ? 'block' : 'none';
+    document.getElementById('tab-btn-' + t).classList.toggle('active', t === name);
+  });
+  if (name === 'charges') loadCharges();
+  if (name === 'conversations') loadConversations();
+  if (name === 'report' && !document.getElementById('report-from').value) {
+    const to = new Date();
+    const from = new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
+    document.getElementById('report-from').value = from.toISOString().slice(0, 10);
+    document.getElementById('report-to').value = to.toISOString().slice(0, 10);
+    loadReport();
+  }
+}
+
+async function loadCharges() {
+  const el = document.getElementById('charges-content');
+  el.innerHTML = '<div class="loading">Carregando...</div>';
+  const status = document.getElementById('charge-status-filter').value;
+  try {
+    const qs = status ? '?status=' + status : '';
+    const charges = await api('/charges' + qs);
+    if (!charges.length) {
+      el.innerHTML = '<div class="empty">Nenhuma cobrança encontrada.</div>';
+      return;
+    }
+    let html = '<table><thead><tr><th>Cliente</th><th>Descrição</th><th>Valor</th><th>Vencimento</th><th>Status</th></tr></thead><tbody>';
+    for (const c of charges) {
+      html += `<tr>
+        <td>${c.client?.name ?? '-'}</td>
+        <td>${c.description}</td>
+        <td>${fmtMoney(c.amountCents)}</td>
+        <td>${fmtDate(c.dueDate)}</td>
+        <td><span class="badge ${c.status}">${c.status}</span></td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<div class="empty">' + e.message + '</div>';
+  }
+}
+
+async function loadConversations() {
+  const el = document.getElementById('conversations-content');
+  el.innerHTML = '<div class="loading">Carregando...</div>';
+  const humanFilter = document.getElementById('conv-human-filter').value;
+  try {
+    const qs = humanFilter ? '?humanRequested=' + humanFilter : '';
+    const conversations = await api('/conversations' + qs);
+    if (!conversations.length) {
+      el.innerHTML = '<div class="empty">Nenhuma conversa encontrada ainda.</div>';
+      return;
+    }
+    let html = '<table><thead><tr><th>Cliente</th><th>Cobrança</th><th>Estágio</th><th>Atenção</th><th>Última atualização</th></tr></thead><tbody>';
+    for (const c of conversations) {
+      html += `<tr class="clickable" onclick="openConversation('${c.id}')">
+        <td>${c.client?.name ?? '-'}</td>
+        <td>${c.charge?.description ?? '-'}</td>
+        <td><span class="badge ${c.stage}">${c.stage.replaceAll('_', ' ')}</span></td>
+        <td>${c.humanRequested ? '<span class="human-flag">⚠ precisa de humano</span>' : '-'}</td>
+        <td>${fmtDateTime(c.updatedAt)}</td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<div class="empty">' + e.message + '</div>';
+  }
+}
+
+async function openConversation(id) {
+  const modal = document.getElementById('modal');
+  modal.innerHTML = '<div class="loading">Carregando conversa...</div>';
+  document.getElementById('modal-overlay').classList.add('open');
+  try {
+    const conv = await api('/conversations/' + id);
+    let html = `<h3>${conv.client?.name ?? '-'}</h3>
+      <p style="color:var(--muted); font-size:13px; margin-top:-8px;">
+        ${conv.charge?.description ?? 'Sem cobrança vinculada'} —
+        <span class="badge ${conv.stage}">${conv.stage.replaceAll('_', ' ')}</span>
+        ${conv.humanRequested ? ' <span class="human-flag">⚠ aguardando humano</span>' : ''}
+      </p><hr/>`;
+    if (!conv.messages.length) {
+      html += '<div class="empty">Nenhuma mensagem trocada ainda.</div>';
+    } else {
+      for (const m of conv.messages) {
+        html += `<div class="msg ${m.direction}">
+          ${m.content}
+          <div class="meta">${m.direction === 'INBOUND' ? 'Cliente' : 'Agente'} • ${fmtDateTime(m.createdAt)}${m.intent ? ' • ' + m.intent.replaceAll('_', ' ') : ''}</div>
+        </div>`;
+      }
+    }
+    html += '<div style="text-align:right; margin-top:16px;"><button class="secondary" onclick="closeModal()">Fechar</button></div>';
+    modal.innerHTML = html;
+  } catch (e) {
+    modal.innerHTML = '<div class="empty">' + e.message + '</div>';
+  }
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+function closeModalOnOverlay(event) {
+  if (event.target.id === 'modal-overlay') closeModal();
+}
+
+async function loadReport() {
+  const el = document.getElementById('report-content');
+  el.innerHTML = '<div class="loading">Gerando...</div>';
+  const from = document.getElementById('report-from').value;
+  const to = document.getElementById('report-to').value;
+  try {
+    const r = await api(`/reports/cobranca?from=${from}&to=${to}`);
+    el.innerHTML = `<div class="kpis">
+      <div class="kpi"><div class="value">${r.clientesContatados}</div><div class="label">Clientes contatados</div></div>
+      <div class="kpi"><div class="value">${r.clientesQueResponderam}</div><div class="label">Responderam</div></div>
+      <div class="kpi"><div class="value">${r.semResposta}</div><div class="label">Sem resposta</div></div>
+      <div class="kpi"><div class="value">${r.clientesQuePediramNegociacao}</div><div class="label">Pediram negociação</div></div>
+      <div class="kpi"><div class="value">${r.acordosRealizados}</div><div class="label">Acordos realizados</div></div>
+      <div class="kpi"><div class="value">${r.pagamentosConfirmados}</div><div class="label">Pagamentos confirmados</div></div>
+      <div class="kpi"><div class="value">${r.clientesEncaminhadosParaHumano}</div><div class="label">Encaminhados p/ humano</div></div>
+      <div class="kpi"><div class="value">${fmtMoney(r.valorRecuperadoCentavos)}</div><div class="label">Valor recuperado</div></div>
+    </div>`;
+  } catch (e) {
+    el.innerHTML = '<div class="empty">' + e.message + '</div>';
+  }
+}
+
+// Login com Enter
+document.getElementById('login-password').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') doLogin();
+});
+
+if (token) {
+  showApp();
+}
+</script>
+
+</body>
+</html>
