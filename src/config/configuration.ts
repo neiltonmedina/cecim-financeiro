@@ -30,6 +30,17 @@ export default () => ({
   anthropic: {
     apiKey: process.env.ANTHROPIC_API_KEY ?? '',
   },
+  inter: {
+    clientId: process.env.INTER_CLIENT_ID ?? '',
+    clientSecret: process.env.INTER_CLIENT_SECRET ?? '',
+    // Certificado mTLS em base64 (conteúdo do .crt/.key codificado em base64, numa linha só)
+    certBase64: process.env.INTER_CERT_BASE64 ?? '',
+    keyBase64: process.env.INTER_KEY_BASE64 ?? '',
+    baseUrl: process.env.INTER_BASE_URL ?? 'https://cdpj.partners.bancointer.com.br',
+    // Multa e juros de mora padrão aplicados a todo boleto gerado (nunca inventados pelo agente - config fixa da empresa)
+    multaPercentual: parseFloat(process.env.INTER_MULTA_PERCENTUAL ?? '0'),
+    moraTaxaMensal: parseFloat(process.env.INTER_MORA_TAXA_MENSAL ?? '0'),
+  },
   escalationEmail: process.env.ESCALATION_EMAIL ?? '',
   smtp: {
     host: process.env.SMTP_HOST ?? '',

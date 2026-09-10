@@ -26,6 +26,34 @@ número de celular ("chip") novo contratado para a operação.
   humano automaticamente** em situações sensíveis (veja seção própria abaixo).
 - Autenticação via **JWT** para proteger a API.
 
+## Emissão automática de boleto (Banco Inter)
+
+Se configurado, toda cobrança criada (`POST /charges` ou `/charges/bulk`)
+já gera o boleto automaticamente via **API de Cobrança do Banco Inter**,
+com multa e juros de mora aplicados conforme configuração, e o link de
+pagamento (`paymentLink`) é preenchido sozinho com o link do PDF do boleto.
+
+**Configuração necessária** (`.env`):
+- `INTER_CLIENT_ID` / `INTER_CLIENT_SECRET` — gerados no Internet Banking
+  Inter Empresas → API.
+- `INTER_CERT_BASE64` / `INTER_KEY_BASE64` — conteúdo dos arquivos de
+  certificado (`.crt`/`.key`, exigidos pelo Inter para mTLS) convertidos
+  para base64, em uma linha só.
+- `INTER_MULTA_PERCENTUAL` / `INTER_MORA_TAXA_MENSAL` — regras fixas de
+  multa/juros aplicadas a todo boleto (0 = sem cobrança extra).
+
+**Importante**: o Inter não devolve um link público pronto — o PDF é obtido
+via chamada autenticada. Por isso o sistema baixa o PDF, guarda no banco, e
+serve através de `GET /boletos/:chargeId` (rota pública, sem login — o ID
+da cobrança já funciona como token de acesso). Esse é o link que vai nas
+mensagens de WhatsApp/SMS/E-mail.
+
+O CPF/CNPJ do cliente (`document` no cadastro) é obrigatório para gerar o
+boleto — sem ele, a cobrança é criada normalmente mas sem boleto, e o erro
+fica registrado em `boletoErro` (consultável em `GET /charges/:id`).
+
+⚠️ **Teste primeiro no ambiente sandbox do Inter** antes de usar em produção.
+
 ## Agente de cobrança conversacional (WhatsApp)
 
 Quando uma cobrança é disparada por WhatsApp, o sistema abre uma

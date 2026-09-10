@@ -12,6 +12,7 @@ import { ChargesModule } from './modules/charges/charges.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ConversationsModule } from './modules/conversations/conversations.module';
 import { ReportsModule } from './modules/reports/reports.module';
+import { BoletosModule } from './modules/boletos/boletos.module';
 import { SchedulerModule } from './modules/scheduler/scheduler.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
 
@@ -31,6 +32,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
     NotificationsModule,
     ConversationsModule,
     ReportsModule,
+    BoletosModule,
     ChargesModule,
     SchedulerModule,
     WebhooksModule,

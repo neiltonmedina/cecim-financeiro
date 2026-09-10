@@ -3,6 +3,7 @@ import { ChargeStatus, TemplateType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ConversationsService } from '../conversations/conversations.service';
+import { BoletosService } from '../boletos/boletos.service';
 import { CreateChargeDto } from './dto/create-charge.dto';
 import { CreateBulkChargesDto } from './dto/create-bulk-charges.dto';
 import { DispatchChargesDto } from './dto/dispatch-charges.dto';
@@ -13,12 +14,18 @@ export class ChargesService {
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
     private readonly conversationsService: ConversationsService,
+    private readonly boletosService: BoletosService,
   ) {}
 
-  create(dto: CreateChargeDto, createdBy?: string) {
-    return this.prisma.charge.create({
+  async create(dto: CreateChargeDto, createdBy?: string) {
+    const charge = await this.prisma.charge.create({
       data: { ...dto, dueDate: new Date(dto.dueDate), createdBy },
     });
+    if (this.boletosService.isConfigured() && !dto.paymentLink) {
+      const client = await this.prisma.client.findUnique({ where: { id: charge.clientId } });
+      if (client) return this.boletosService.gerarBoletoParaCobranca(charge, client);
+    }
+    return charge;
   }
 
   /** Emite a mesma cobrança para todos os clientes selecionados de uma vez. */
@@ -28,7 +35,7 @@ export class ChargesService {
       throw new BadRequestException('Nenhum cliente ativo encontrado para os IDs informados');
     }
 
-    const charges = await this.prisma.$transaction(
+    let charges = await this.prisma.$transaction(
       clients.map((client) =>
         this.prisma.charge.create({
           data: {
@@ -42,6 +49,14 @@ export class ChargesService {
         }),
       ),
     );
+
+    // Gera boleto no Inter (quando configurado) para cada cobrança sem link próprio já definido.
+    if (this.boletosService.isConfigured() && !dto.paymentLinkBase) {
+      const clientsById = new Map(clients.map((c) => [c.id, c]));
+      charges = await Promise.all(
+        charges.map((charge) => this.boletosService.gerarBoletoParaCobranca(charge, clientsById.get(charge.clientId)!)),
+      );
+    }
 
     return { criadas: charges.length, charges };
   }

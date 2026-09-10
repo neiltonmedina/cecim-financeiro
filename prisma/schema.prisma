@@ -75,6 +75,11 @@ model Charge {
   paidAt        DateTime?
   canceledAt    DateTime?
 
+  // Boleto emitido via API do Banco Inter (quando configurado)
+  boletoCodigoSolicitacao String?
+  boletoPdfBase64         String? @db.Text
+  boletoErro              String?
+
   notifications NotificationLog[]
   conversations Conversation[]
   agreements    Agreement[]
