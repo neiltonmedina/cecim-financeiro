@@ -121,14 +121,16 @@ export class InterBoletoProvider {
       },
     };
 
+    // A API do Inter espera a taxa como decimal com 2 casas (ex: "2.00") - um
+    // número inteiro puro (ex: 2) é rejeitado com "Não foi possível converter o valor".
     if (cfg.multaPercentual > 0) {
-      payload.multa = { codigoMulta: 'PERCENTUAL', taxa: cfg.multaPercentual };
+      payload.multa = { codigoMulta: 'PERCENTUAL', taxa: cfg.multaPercentual.toFixed(2) };
     } else {
       payload.multa = { codigoMulta: 'NAOTEMMULTA' };
     }
 
     if (cfg.moraTaxaMensal > 0) {
-      payload.mora = { codigoMora: 'TAXAMENSAL', taxa: cfg.moraTaxaMensal };
+      payload.mora = { codigoMora: 'TAXAMENSAL', taxa: cfg.moraTaxaMensal.toFixed(2) };
     } else {
       payload.mora = { codigoMora: 'ISENTO' };
     }
