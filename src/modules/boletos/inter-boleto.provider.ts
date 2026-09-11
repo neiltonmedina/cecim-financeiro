@@ -121,19 +121,20 @@ export class InterBoletoProvider {
       },
     };
 
-    // A API do Inter exige os três campos em multa/mora (codigo, taxa e valor),
-    // mesmo quando um deles não é usado - omitir "valor" causa erro genérico
-    // "Não foi possível converter o valor" na criação do boleto.
+    // A API do Inter usa a chave "codigo" (não "codigoMulta"/"codigoMora") dentro
+    // dos objetos multa/mora, e sempre com os três campos (codigo, taxa e valor)
+    // presentes, mesmo quando um deles não é usado - confirmado na implementação
+    // de referência (renatojdev/bancointer-python, classes Multa/Mora).
     if (cfg.multaPercentual > 0) {
-      payload.multa = { codigoMulta: 'PERCENTUAL', taxa: cfg.multaPercentual, valor: 0 };
+      payload.multa = { codigo: 'PERCENTUAL', taxa: cfg.multaPercentual, valor: 0 };
     } else {
-      payload.multa = { codigoMulta: 'NAOTEMMULTA', taxa: 0, valor: 0 };
+      payload.multa = { codigo: 'NAOTEMMULTA', taxa: 0, valor: 0 };
     }
 
     if (cfg.moraTaxaMensal > 0) {
-      payload.mora = { codigoMora: 'TAXAMENSAL', taxa: cfg.moraTaxaMensal, valor: 0 };
+      payload.mora = { codigo: 'TAXAMENSAL', taxa: cfg.moraTaxaMensal, valor: 0 };
     } else {
-      payload.mora = { codigoMora: 'ISENTO', taxa: 0, valor: 0 };
+      payload.mora = { codigo: 'ISENTO', taxa: 0, valor: 0 };
     }
 
     const headers = { Authorization: `Bearer ${token}` };
