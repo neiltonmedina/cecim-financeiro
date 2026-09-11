@@ -121,18 +121,19 @@ export class InterBoletoProvider {
       },
     };
 
-    // A API do Inter espera a taxa como decimal com 2 casas (ex: "2.00") - um
-    // número inteiro puro (ex: 2) é rejeitado com "Não foi possível converter o valor".
+    // A API do Inter exige os três campos em multa/mora (codigo, taxa e valor),
+    // mesmo quando um deles não é usado - omitir "valor" causa erro genérico
+    // "Não foi possível converter o valor" na criação do boleto.
     if (cfg.multaPercentual > 0) {
-      payload.multa = { codigoMulta: 'PERCENTUAL', taxa: cfg.multaPercentual.toFixed(2) };
+      payload.multa = { codigoMulta: 'PERCENTUAL', taxa: cfg.multaPercentual, valor: 0 };
     } else {
-      payload.multa = { codigoMulta: 'NAOTEMMULTA' };
+      payload.multa = { codigoMulta: 'NAOTEMMULTA', taxa: 0, valor: 0 };
     }
 
     if (cfg.moraTaxaMensal > 0) {
-      payload.mora = { codigoMora: 'TAXAMENSAL', taxa: cfg.moraTaxaMensal.toFixed(2) };
+      payload.mora = { codigoMora: 'TAXAMENSAL', taxa: cfg.moraTaxaMensal, valor: 0 };
     } else {
-      payload.mora = { codigoMora: 'ISENTO' };
+      payload.mora = { codigoMora: 'ISENTO', taxa: 0, valor: 0 };
     }
 
     const headers = { Authorization: `Bearer ${token}` };
