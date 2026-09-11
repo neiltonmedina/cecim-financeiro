@@ -33,4 +33,29 @@ export class CreateClientDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  // Endereço - necessário para emissão de boleto no Inter (ele valida o CEP de verdade)
+  @IsOptional()
+  @IsString()
+  cep?: string;
+
+  @IsOptional()
+  @IsString()
+  endereco?: string;
+
+  @IsOptional()
+  @IsString()
+  numero?: string;
+
+  @IsOptional()
+  @IsString()
+  bairro?: string;
+
+  @IsOptional()
+  @IsString()
+  cidade?: string;
+
+  @IsOptional()
+  @IsString()
+  uf?: string;
 }

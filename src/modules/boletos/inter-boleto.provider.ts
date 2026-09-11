@@ -99,6 +99,14 @@ export class InterBoletoProvider {
     if (!documento) {
       throw new Error('Cliente sem CPF/CNPJ cadastrado - obrigatório para gerar boleto no Inter');
     }
+    // O Inter valida o CEP contra uma base real de endereços - um CEP inventado
+    // (ex: 00000000) é rejeitado. É obrigatório cadastrar o endereço real do cliente.
+    const cep = this.onlyDigits(client.cep ?? '');
+    if (!cep || !client.endereco || !client.bairro || !client.cidade || !client.uf) {
+      throw new Error(
+        'Cliente sem endereço completo cadastrado (cep, endereco, bairro, cidade, uf) - obrigatório para gerar boleto no Inter',
+      );
+    }
     const tipoPessoa = documento.length > 11 ? 'JURIDICA' : 'FISICA';
 
     const payload: Record<string, any> = {
@@ -111,13 +119,12 @@ export class InterBoletoProvider {
         tipoPessoa,
         nome: this.splitName(client.name),
         email: client.email ?? undefined,
-        // Endereço não é obrigatório em todos os casos, mas o Inter recomenda informar.
-        endereco: 'Não informado',
-        bairro: 'Não informado',
-        cidade: 'Não informado',
-        uf: 'SP',
-        cep: '00000000',
-        numero: 'SN',
+        endereco: client.endereco,
+        bairro: client.bairro,
+        cidade: client.cidade,
+        uf: client.uf,
+        cep,
+        numero: client.numero ?? 'SN',
       },
     };
 
