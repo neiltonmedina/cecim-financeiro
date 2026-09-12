@@ -21,10 +21,10 @@ export class DispatchChargesDto {
   /**
    * Intervalo (em dias) entre os contatos da régua de cobrança (lembrete,
    * 3ª tentativa, etc.), definido no painel antes de confirmar o disparo
-   * da campanha. Valores permitidos: 3, 5 ou 10 dias.
+   * da campanha. Valores permitidos: 5, 10 ou 15 dias.
    */
   @IsOptional()
-  @IsIn([3, 5, 10])
+  @IsIn([5, 10, 15])
   intervalDays?: number;
 
   /**

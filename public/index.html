@@ -158,6 +158,7 @@
       <button id="tab-btn-charges" class="active" onclick="switchTab('charges')">Cobranças</button>
       <button id="tab-btn-conversations" onclick="switchTab('conversations')">Respostas dos Clientes</button>
       <button id="tab-btn-report" onclick="switchTab('report')">Relatório</button>
+      <button id="tab-btn-messages" onclick="switchTab('messages')">Mensagens</button>
     </nav>
 
     <div id="tab-clients" class="tab" style="display:none;">
@@ -216,9 +217,9 @@
           <strong id="campaign-count" style="font-size:13px;">0 selecionada(s)</strong>
           <label style="font-size:13px; color:var(--muted);">Intervalo entre contatos:</label>
           <select id="campaign-interval">
-            <option value="3">3 dias</option>
             <option value="5" selected>5 dias</option>
             <option value="10">10 dias</option>
+            <option value="15">15 dias</option>
           </select>
           <button onclick="confirmarCampanha()">Confirmar e disparar</button>
           <span style="font-size:12px; color:var(--muted);">O disparo só ocorre após você confirmar aqui - nada é enviado sozinho.</span>
@@ -251,6 +252,20 @@
           <button onclick="loadReport()">Gerar relatório</button>
         </div>
         <div id="report-content"></div>
+      </div>
+    </div>
+
+    <div id="tab-messages" class="tab" style="display:none;">
+      <div class="card">
+        <p style="font-size:13px; color:var(--muted); margin-top:0;">
+          Aqui você edita o texto usado para SMS e E-mail (enviados como texto livre). Para o WhatsApp, o texto
+          exibido é só uma referência - a mensagem de verdade é a que está aprovada no WhatsApp Manager da Meta;
+          se quiser mudá-la, precisa editar por lá também. Use os placeholders entre chaves duplas
+          (ex: <code>{{cliente}}</code>, <code>{{valor}}</code>, <code>{{vencimento}}</code>, <code>{{diasAtraso}}</code>,
+          <code>{{linkPagamento}}</code>, <code>{{pix}}</code>, <code>{{descricao}}</code>) - eles são trocados
+          automaticamente pelos dados de cada cobrança.
+        </p>
+        <div id="messages-content" class="loading">Carregando...</div>
       </div>
     </div>
   </main>
@@ -332,13 +347,14 @@ function showApp() {
 }
 
 function switchTab(name) {
-  ['clients', 'charges', 'conversations', 'report'].forEach((t) => {
+  ['clients', 'charges', 'conversations', 'report', 'messages'].forEach((t) => {
     document.getElementById('tab-' + t).style.display = t === name ? 'block' : 'none';
     document.getElementById('tab-btn-' + t).classList.toggle('active', t === name);
   });
   if (name === 'clients') loadClients();
   if (name === 'charges') loadCharges();
   if (name === 'conversations') loadConversations();
+  if (name === 'messages') loadTemplates();
   if (name === 'report' && !document.getElementById('report-from').value) {
     const to = new Date();
     const from = new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
@@ -408,6 +424,78 @@ async function createClient() {
   } catch (e) {
     msgEl.style.color = 'var(--red)';
     msgEl.textContent = 'Erro ao cadastrar: ' + e.message;
+  }
+}
+
+// --- Mensagens (templates) ---
+
+async function loadTemplates() {
+  const el = document.getElementById('messages-content');
+  el.innerHTML = '<div class="loading">Carregando...</div>';
+  try {
+    const templates = await api('/templates');
+    if (!templates.length) {
+      el.innerHTML = '<div class="empty">Nenhum template cadastrado.</div>';
+      return;
+    }
+    let html = '<table><thead><tr><th>Canal</th><th>Tipo</th><th>Nome</th><th>Ativo</th><th></th></tr></thead><tbody>';
+    for (const t of templates) {
+      html += `<tr>
+        <td>${t.channel}</td>
+        <td>${t.type.replaceAll('_', ' ')}</td>
+        <td>${t.name}</td>
+        <td>${t.active ? 'Sim' : 'Não'}</td>
+        <td><button class="secondary" onclick="openTemplateEdit('${t.id}')">Editar</button></td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<div class="empty">' + e.message + '</div>';
+  }
+}
+
+async function openTemplateEdit(id) {
+  const modal = document.getElementById('modal');
+  modal.innerHTML = '<div class="loading">Carregando...</div>';
+  document.getElementById('modal-overlay').classList.add('open');
+  try {
+    const t = await api('/templates/' + id);
+    const isWhatsapp = t.channel === 'WHATSAPP';
+    modal.innerHTML = `
+      <h3>${t.name}</h3>
+      <p style="color:var(--muted); font-size:13px; margin-top:-8px;">${t.channel} - ${t.type.replaceAll('_', ' ')}</p>
+      ${isWhatsapp ? '<p style="font-size:12px; color:var(--red);">⚠ Este texto é só referência interna - o WhatsApp usa o modelo aprovado na Meta.</p>' : ''}
+      ${t.channel === 'EMAIL' ? `<label style="font-size:13px; color:var(--muted);">Assunto</label>
+        <input id="tpl-subject" style="width:100%; margin-bottom:10px;" value="${(t.subject ?? '').replaceAll('"', '&quot;')}" />` : ''}
+      <label style="font-size:13px; color:var(--muted);">Corpo da mensagem</label>
+      <textarea id="tpl-body" style="width:100%; min-height:160px; padding:8px; border-radius:6px; border:1px solid var(--border); font-size:14px; font-family:inherit;">${t.body}</textarea>
+      <div style="text-align:right; margin-top:16px; display:flex; justify-content:flex-end; gap:8px;">
+        <button class="secondary" onclick="closeModal()">Cancelar</button>
+        <button onclick="saveTemplate('${t.id}')">Salvar</button>
+      </div>
+      <div id="tpl-save-msg" style="margin-top:8px; font-size:13px; text-align:right;"></div>
+    `;
+  } catch (e) {
+    modal.innerHTML = '<div class="empty">' + e.message + '</div>';
+  }
+}
+
+async function saveTemplate(id) {
+  const msgEl = document.getElementById('tpl-save-msg');
+  const body = document.getElementById('tpl-body').value;
+  const subjectEl = document.getElementById('tpl-subject');
+  try {
+    await api('/templates/' + id, {
+      method: 'PATCH',
+      body: JSON.stringify({ body, ...(subjectEl ? { subject: subjectEl.value } : {}) }),
+    });
+    msgEl.style.color = 'var(--green)';
+    msgEl.textContent = 'Salvo com sucesso!';
+    loadTemplates();
+  } catch (e) {
+    msgEl.style.color = 'var(--red)';
+    msgEl.textContent = 'Erro ao salvar: ' + e.message;
   }
 }
 
