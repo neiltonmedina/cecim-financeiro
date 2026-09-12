@@ -4,128 +4,174 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>CECIM - Painel de Cobrança</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #f4f5f7;
+    --bg: #eef1f6;
     --card: #ffffff;
-    --text: #1f2430;
-    --muted: #6b7280;
-    --border: #e3e5e9;
-    --primary: #2563eb;
-    --primary-dark: #1d4ed8;
-    --green: #16a34a;
-    --yellow: #d97706;
-    --red: #dc2626;
-    --purple: #7c3aed;
+    --text: #101a2e;
+    --muted: #64748b;
+    --border: #e4e8f0;
+    --primary: #14285c;
+    --primary-dark: #0c1c46;
+    --accent: #2f5ed6;
+    --accent-soft: #eaf0ff;
+    --green: #0f9d58;
+    --green-soft: #e3f8ec;
+    --yellow: #b7791f;
+    --yellow-soft: #fdf3e0;
+    --red: #d1364a;
+    --red-soft: #fbe9ed;
+    --purple: #7248c7;
+    --purple-soft: #f0eafc;
+    --shadow: 0 1px 2px rgba(16, 26, 46, 0.04), 0 8px 24px -12px rgba(16, 26, 46, 0.12);
   }
   * { box-sizing: border-box; }
   body {
     margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
     background: var(--bg);
     color: var(--text);
+    -webkit-font-smoothing: antialiased;
   }
   header {
     background: var(--card);
     border-bottom: 1px solid var(--border);
-    padding: 14px 20px;
+    padding: 14px 28px;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    box-shadow: var(--shadow);
+    position: sticky;
+    top: 0;
+    z-index: 10;
   }
-  header h1 { font-size: 18px; margin: 0; }
-  header .actions { display: flex; gap: 10px; align-items: center; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand img { height: 34px; width: auto; display: block; }
+  .brand .brand-fallback {
+    height: 34px; padding: 0 12px; border-radius: 8px;
+    background: var(--primary); color: #fff; display: flex; align-items: center;
+    font-weight: 800; letter-spacing: 0.5px; font-size: 15px;
+  }
+  .brand-text { display: flex; flex-direction: column; line-height: 1.15; }
+  .brand-text .name { font-size: 16px; font-weight: 700; color: var(--text); }
+  .brand-text .tagline { font-size: 11.5px; color: var(--muted); font-weight: 500; }
+  header .actions { display: flex; gap: 14px; align-items: center; }
+  #user-name { font-size: 13px; color: var(--muted); font-weight: 500; }
+
   button {
     cursor: pointer;
     border: none;
-    border-radius: 6px;
-    padding: 8px 14px;
+    border-radius: 8px;
+    padding: 9px 16px;
     font-size: 14px;
-    background: var(--primary);
+    font-weight: 600;
+    font-family: inherit;
+    background: var(--accent);
     color: white;
+    transition: background 0.15s ease;
   }
-  button:hover { background: var(--primary-dark); }
-  button.secondary { background: #e5e7eb; color: var(--text); }
-  button.secondary:hover { background: #d1d5db; }
+  button:hover { background: #2450b8; }
+  button.secondary { background: #eef1f6; color: var(--text); font-weight: 500; }
+  button.secondary:hover { background: #e2e6ee; }
   input, select {
-    padding: 8px 10px;
-    border-radius: 6px;
+    padding: 9px 12px;
+    border-radius: 8px;
     border: 1px solid var(--border);
     font-size: 14px;
+    font-family: inherit;
+    background: #fff;
+    color: var(--text);
   }
+  input:focus, select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  code { background: var(--accent-soft); color: var(--primary); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
 
   #login-screen {
-    max-width: 380px;
-    margin: 80px auto;
+    max-width: 400px;
+    margin: 90px auto;
     background: var(--card);
-    padding: 30px;
-    border-radius: 10px;
-    border: 1px solid var(--border);
+    padding: 40px 36px;
+    border-radius: 16px;
+    box-shadow: var(--shadow);
   }
-  #login-screen h2 { margin-top: 0; }
-  #login-screen label { display: block; margin: 12px 0 4px; font-size: 13px; color: var(--muted); }
+  #login-screen .login-logo { display: flex; justify-content: center; margin-bottom: 22px; }
+  #login-screen .login-logo img { height: 64px; width: auto; }
+  #login-screen .login-logo .brand-fallback { height: 56px; padding: 0 18px; font-size: 20px; border-radius: 12px; }
+  #login-screen h2 { margin: 0 0 4px; font-size: 19px; text-align: center; font-weight: 700; }
+  #login-screen .subtitle { text-align: center; color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+  #login-screen label { display: block; margin: 14px 0 5px; font-size: 13px; color: var(--muted); font-weight: 500; }
   #login-screen input { width: 100%; }
   #login-error { color: var(--red); font-size: 13px; margin-top: 10px; min-height: 18px; }
 
-  main { max-width: 1100px; margin: 0 auto; padding: 20px; }
-  nav.tabs { display: flex; gap: 8px; margin-bottom: 18px; }
-  nav.tabs button { background: transparent; color: var(--muted); border: 1px solid var(--border); }
-  nav.tabs button.active { background: var(--primary); color: white; border-color: var(--primary); }
+  main { max-width: 1140px; margin: 0 auto; padding: 28px 24px; }
+  nav.tabs { display: flex; gap: 4px; margin-bottom: 22px; border-bottom: 1px solid var(--border); }
+  nav.tabs button {
+    background: transparent; color: var(--muted); font-weight: 600;
+    border: none; border-radius: 0; padding: 10px 6px; margin-right: 22px;
+    border-bottom: 2px solid transparent;
+  }
+  nav.tabs button:hover { background: transparent; color: var(--text); }
+  nav.tabs button.active { color: var(--primary); border-bottom-color: var(--accent); }
 
   .card {
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: 10px;
-    padding: 18px;
-    margin-bottom: 18px;
+    box-shadow: var(--shadow);
+    border-radius: 14px;
+    padding: 22px;
+    margin-bottom: 20px;
   }
+  .card h3 { font-size: 15px; font-weight: 700; }
   .filters { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
 
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); }
-  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; }
-  tr:hover td { background: #fafafa; }
+  th, td { text-align: left; padding: 12px 10px; border-bottom: 1px solid var(--border); }
+  th { color: var(--muted); font-weight: 700; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.4px; }
+  tr:hover td { background: #f8f9fc; }
   tr.clickable { cursor: pointer; }
 
-  .badge { padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; display: inline-block; }
-  .badge.PENDENTE { background: #fef3c7; color: var(--yellow); }
-  .badge.ENVIADA { background: #dbeafe; color: var(--primary); }
-  .badge.PAGA { background: #dcfce7; color: var(--green); }
-  .badge.VENCIDA { background: #fee2e2; color: var(--red); }
-  .badge.CANCELADA { background: #e5e7eb; color: var(--muted); }
+  .badge { padding: 4px 11px; border-radius: 999px; font-size: 12px; font-weight: 700; display: inline-block; }
+  .badge.PENDENTE { background: var(--yellow-soft); color: var(--yellow); }
+  .badge.ENVIADA { background: var(--accent-soft); color: var(--accent); }
+  .badge.PAGA { background: var(--green-soft); color: var(--green); }
+  .badge.VENCIDA { background: var(--red-soft); color: var(--red); }
+  .badge.CANCELADA { background: #eef1f6; color: var(--muted); }
 
-  .badge.INICIADA { background: #dbeafe; color: var(--primary); }
-  .badge.LEMBRETE_ENVIADO { background: #fef3c7; color: var(--yellow); }
+  .badge.INICIADA { background: var(--accent-soft); color: var(--accent); }
+  .badge.LEMBRETE_ENVIADO { background: var(--yellow-soft); color: var(--yellow); }
   .badge.TERCEIRA_TENTATIVA { background: #ffedd5; color: #c2410c; }
-  .badge.NEGOCIACAO { background: #ede9fe; color: var(--purple); }
-  .badge.AGUARDANDO_PAGAMENTO { background: #dcfce7; color: var(--green); }
-  .badge.AGUARDANDO_HUMANO { background: #fee2e2; color: var(--red); }
-  .badge.ENCERRADA { background: #e5e7eb; color: var(--muted); }
+  .badge.NEGOCIACAO { background: var(--purple-soft); color: var(--purple); }
+  .badge.AGUARDANDO_PAGAMENTO { background: var(--green-soft); color: var(--green); }
+  .badge.AGUARDANDO_HUMANO { background: var(--red-soft); color: var(--red); }
+  .badge.ENCERRADA { background: #eef1f6; color: var(--muted); }
 
   .human-flag { color: var(--red); font-weight: 700; }
 
-  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
-  .kpi { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; text-align: center; }
-  .kpi .value { font-size: 26px; font-weight: 700; }
-  .kpi .label { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+  .kpi { background: var(--card); border: 1px solid var(--border); box-shadow: var(--shadow); border-radius: 14px; padding: 18px; text-align: center; }
+  .kpi .value { font-size: 28px; font-weight: 800; color: var(--primary); }
+  .kpi .label { font-size: 12px; color: var(--muted); margin-top: 4px; font-weight: 500; }
 
   #modal-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    position: fixed; inset: 0; background: rgba(16, 26, 46, 0.5);
     display: none; align-items: center; justify-content: center; padding: 20px;
+    backdrop-filter: blur(2px);
   }
   #modal-overlay.open { display: flex; }
   #modal {
-    background: var(--card); border-radius: 10px; max-width: 560px; width: 100%;
-    max-height: 80vh; overflow-y: auto; padding: 20px;
+    background: var(--card); border-radius: 16px; max-width: 560px; width: 100%;
+    max-height: 80vh; overflow-y: auto; padding: 24px; box-shadow: 0 20px 60px -15px rgba(16,26,46,0.35);
   }
   #modal h3 { margin-top: 0; }
   .msg { margin-bottom: 10px; padding: 10px 12px; border-radius: 10px; max-width: 85%; font-size: 14px; }
-  .msg.INBOUND { background: #eef2ff; margin-right: auto; }
-  .msg.OUTBOUND { background: #f0fdf4; margin-left: auto; text-align: right; }
+  .msg.INBOUND { background: var(--accent-soft); margin-right: auto; }
+  .msg.OUTBOUND { background: var(--green-soft); margin-left: auto; text-align: right; }
   .msg .meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
   .empty { color: var(--muted); text-align: center; padding: 30px 0; }
   .loading { color: var(--muted); text-align: center; padding: 30px 0; }
-  .import-log { max-height: 260px; overflow-y: auto; font-size: 13px; margin-top: 10px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+  .import-log { max-height: 260px; overflow-y: auto; font-size: 13px; margin-top: 10px; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
   .import-log .ok { color: var(--green); }
   .import-log .fail { color: var(--red); }
 </style>
@@ -134,20 +180,30 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <div id="login-screen">
-  <h2>CECIM - Painel de Cobrança</h2>
+  <div class="login-logo">
+    <img src="/logo.png" alt="CECIM" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'brand-fallback',textContent:'CECIM'}))" />
+  </div>
+  <h2>Painel de Cobrança</h2>
+  <p class="subtitle">Acesse sua conta para continuar</p>
   <label>E-mail</label>
   <input id="login-email" type="email" placeholder="admin@cecim.com.br" />
   <label>Senha</label>
   <input id="login-password" type="password" placeholder="••••••••" />
   <div id="login-error"></div>
-  <button style="width:100%; margin-top:16px;" onclick="doLogin()">Entrar</button>
+  <button style="width:100%; margin-top:18px;" onclick="doLogin()">Entrar</button>
 </div>
 
 <div id="app" style="display:none;">
   <header>
-    <h1>CECIM - Painel de Cobrança</h1>
+    <div class="brand">
+      <img src="/logo.png" alt="CECIM" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'brand-fallback',textContent:'CECIM'}))" />
+      <div class="brand-text">
+        <span class="name">CECIM Financeiro</span>
+        <span class="tagline">Painel de Cobrança</span>
+      </div>
+    </div>
     <div class="actions">
-      <span id="user-name" style="font-size:13px; color:var(--muted);"></span>
+      <span id="user-name"></span>
       <button class="secondary" onclick="logout()">Sair</button>
     </div>
   </header>
