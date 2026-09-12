@@ -2,14 +2,14 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Job } from 'bullmq';
-import { Channel } from '@prisma/client';
+import { Channel, TemplateType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NOTIFICATIONS_QUEUE } from './notifications.constants';
 import { WhatsAppProvider } from './providers/whatsapp.provider';
 import { SmsTwilioProvider } from './providers/sms-twilio.provider';
 import { EmailSmtpProvider } from './providers/email-smtp.provider';
 import { ChannelProvider } from './interfaces/channel-provider.interface';
-import { buildTemplateContext, renderTemplate } from './utils/template-renderer.util';
+import { buildTemplateContext, renderTemplate, TemplateContext } from './utils/template-renderer.util';
 
 @Processor(NOTIFICATIONS_QUEUE)
 export class NotificationsProcessor extends WorkerHost {
@@ -66,7 +66,7 @@ export class NotificationsProcessor extends WorkerHost {
         body,
         subject,
         providerTemplateName: template.providerTemplateName ?? undefined,
-        templateParams: [context.cliente, context.valor, context.vencimento],
+        templateParams: this.buildWhatsAppTemplateParams(log.templateType, context),
       });
 
       await this.prisma.notificationLog.update({
@@ -86,6 +86,30 @@ export class NotificationsProcessor extends WorkerHost {
         data: { status: 'FAILED', errorMessage: error.message, failedAt: new Date() },
       });
       throw error; // permite que o BullMQ reprocesse conforme política de retry/backoff
+    }
+  }
+
+  /**
+   * Monta a lista de variáveis (na ordem certa) para cada modelo de mensagem
+   * aprovado na Meta - o número e a ordem dos parâmetros precisa bater
+   * exatamente com as variáveis {{1}}, {{2}}... definidas em cada modelo,
+   * senão o WhatsApp recusa o envio.
+   *
+   * cobranca_cecim (COBRANCA_PENDENTE): {{1}} nome, {{2}} linha digitável.
+   * cecim_hoje_ (LEMBRETE_VENCIMENTO): {{1}} nome, {{2}} valor.
+   * cobranca_vencida_cecim (COBRANCA_VENCIDA): {{1}} nome, {{2}} valor,
+   * {{3}} vencimento, {{4}} pix.
+   */
+  private buildWhatsAppTemplateParams(templateType: TemplateType, context: TemplateContext): string[] {
+    switch (templateType) {
+      case 'COBRANCA_PENDENTE':
+        return [context.cliente, context.linhaDigitavel || context.pix];
+      case 'LEMBRETE_VENCIMENTO':
+        return [context.cliente, context.valor];
+      case 'COBRANCA_VENCIDA':
+        return [context.cliente, context.valor, context.vencimento, context.pix];
+      default:
+        return [context.cliente, context.valor, context.vencimento];
     }
   }
 }

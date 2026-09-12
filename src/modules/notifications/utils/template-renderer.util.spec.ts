@@ -29,6 +29,7 @@ describe('template-renderer.util', () => {
       paymentLink: null,
       description: 'Mensalidade Abril',
       pixCopiaECola: null,
+      linhaDigitavel: null,
     };
 
     const context = buildTemplateContext(client, charge, 'https://app.example.com');
@@ -42,6 +43,7 @@ describe('template-renderer.util', () => {
       descricao: 'Mensalidade Abril',
       diasAtraso: 0,
       pix: '',
+      linhaDigitavel: '',
     });
   });
 
@@ -54,6 +56,7 @@ describe('template-renderer.util', () => {
       descricao: 'teste',
       diasAtraso: 0,
       pix: '',
+      linhaDigitavel: '',
     });
     expect(rendered).toBe('Olá João, valor R$ 100,00, vence 05/05/2026.');
   });

@@ -87,6 +87,7 @@ model Charge {
   boletoCodigoSolicitacao String?
   boletoPdfBase64         String? @db.Text
   pixCopiaECola           String? @db.Text // Pix copia-e-cola retornado junto do boleto pelo Inter
+  linhaDigitavel          String? // linha digitável do boleto (para copiar/colar no banco)
   boletoErro              String?
 
   notifications NotificationLog[]

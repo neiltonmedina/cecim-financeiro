@@ -13,6 +13,7 @@ export interface InterBoletoResult {
   codigoSolicitacao: string;
   pdfBase64: string;
   pixCopiaECola?: string;
+  linhaDigitavel?: string;
 }
 
 /**
@@ -158,16 +159,19 @@ export class InterBoletoProvider {
       throw new Error('O boleto foi criado, mas não foi possível obter o PDF.');
     }
 
-    // Consulta os detalhes da cobrança para obter o Pix copia-e-cola (quando disponível).
+    // Consulta os detalhes da cobrança para obter o Pix copia-e-cola e a linha
+    // digitável do boleto (quando disponíveis).
     let pixCopiaECola: string | undefined;
+    let linhaDigitavel: string | undefined;
     try {
       const detalhes = await this.getClient().get(`/cobranca/v3/cobrancas/${codigoSolicitacao}`, { headers });
       pixCopiaECola = detalhes.data?.pix?.pixCopiaECola;
+      linhaDigitavel = detalhes.data?.boleto?.linhaDigitavel;
     } catch (error: any) {
-      this.logger.warn(`Não foi possível obter o Pix da cobrança ${codigoSolicitacao}: ${error.message}`);
+      this.logger.warn(`Não foi possível obter o Pix/linha digitável da cobrança ${codigoSolicitacao}: ${error.message}`);
     }
 
-    return { codigoSolicitacao, pdfBase64, pixCopiaECola };
+    return { codigoSolicitacao, pdfBase64, pixCopiaECola, linhaDigitavel };
   }
 
   /**

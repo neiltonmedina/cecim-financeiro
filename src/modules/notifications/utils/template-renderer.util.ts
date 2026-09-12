@@ -9,6 +9,7 @@ export interface TemplateContext {
   descricao: string;
   diasAtraso: number;
   pix: string;
+  linhaDigitavel: string;
 }
 
 export function formatCurrencyBRL(amountCents: number): string {
@@ -33,6 +34,7 @@ export function buildTemplateContext(client: Client, charge: Charge, appUrl: str
     descricao: charge.description,
     diasAtraso: calcularDiasAtraso(charge.dueDate),
     pix: charge.pixCopiaECola ?? '',
+    linhaDigitavel: charge.linhaDigitavel ?? '',
   };
 }
 

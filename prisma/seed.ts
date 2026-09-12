@@ -27,7 +27,7 @@ const DEFAULT_TEMPLATES: Array<{
     body:
       'Olá {{cliente}}, passando para lembrar que sua cobrança de {{valor}} ("{{descricao}}") vence em {{vencimento}}. ' +
       'Responda *1* para Pix ou *2* para o boleto: {{linkPagamento}}',
-    providerTemplateName: 'lembrete_vencimento_cecim',
+    providerTemplateName: 'cecim_hoje_',
   },
   {
     channel: Channel.WHATSAPP,
