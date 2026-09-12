@@ -270,7 +270,9 @@ function fmtMoney(cents) {
 }
 function fmtDate(iso) {
   if (!iso) return '-';
-  return new Date(iso).toLocaleDateString('pt-BR');
+  // Datas de vencimento são "só o dia" (meia-noite UTC) - exibe em UTC para não
+  // voltar um dia por causa do fuso horário do navegador (Brasil = UTC-3).
+  return new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 }
 function fmtDateTime(iso) {
   if (!iso) return '-';
