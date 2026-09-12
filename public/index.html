@@ -150,10 +150,40 @@
 
   <main>
     <nav class="tabs">
+      <button id="tab-btn-clients" onclick="switchTab('clients')">Clientes</button>
       <button id="tab-btn-charges" class="active" onclick="switchTab('charges')">Cobranças</button>
       <button id="tab-btn-conversations" onclick="switchTab('conversations')">Respostas dos Clientes</button>
       <button id="tab-btn-report" onclick="switchTab('report')">Relatório</button>
     </nav>
+
+    <div id="tab-clients" class="tab" style="display:none;">
+      <div class="card">
+        <h3 style="margin-top:0;">Novo cliente</h3>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px;">
+          <input id="client-name" placeholder="Nome completo" />
+          <input id="client-document" placeholder="CPF/CNPJ (só números)" />
+          <input id="client-phone" placeholder="Telefone +5599999999999" />
+          <input id="client-email" placeholder="E-mail (opcional)" />
+          <input id="client-cep" placeholder="CEP" />
+          <input id="client-endereco" placeholder="Rua" />
+          <input id="client-numero" placeholder="Número" />
+          <input id="client-bairro" placeholder="Bairro" />
+          <input id="client-cidade" placeholder="Cidade" />
+          <input id="client-uf" placeholder="UF" maxlength="2" />
+        </div>
+        <div style="margin-top:10px; font-size:12px; color:var(--muted);">
+          CEP e endereço completo são obrigatórios apenas se você for gerar boleto (Inter) para esse cliente.
+        </div>
+        <button style="margin-top:12px;" onclick="createClient()">Cadastrar cliente</button>
+        <div id="client-form-msg" style="margin-top:8px; font-size:13px;"></div>
+      </div>
+      <div class="card">
+        <div class="filters">
+          <button class="secondary" onclick="loadClients()">Atualizar</button>
+        </div>
+        <div id="clients-content" class="loading">Carregando...</div>
+      </div>
+    </div>
 
     <div id="tab-charges" class="tab">
       <div class="card">
@@ -287,10 +317,11 @@ function showApp() {
 }
 
 function switchTab(name) {
-  ['charges', 'conversations', 'report'].forEach((t) => {
+  ['clients', 'charges', 'conversations', 'report'].forEach((t) => {
     document.getElementById('tab-' + t).style.display = t === name ? 'block' : 'none';
     document.getElementById('tab-btn-' + t).classList.toggle('active', t === name);
   });
+  if (name === 'clients') loadClients();
   if (name === 'charges') loadCharges();
   if (name === 'conversations') loadConversations();
   if (name === 'report' && !document.getElementById('report-from').value) {
@@ -299,6 +330,69 @@ function switchTab(name) {
     document.getElementById('report-from').value = from.toISOString().slice(0, 10);
     document.getElementById('report-to').value = to.toISOString().slice(0, 10);
     loadReport();
+  }
+}
+
+async function loadClients() {
+  const el = document.getElementById('clients-content');
+  el.innerHTML = '<div class="loading">Carregando...</div>';
+  try {
+    const clients = await api('/clients');
+    if (!clients.length) {
+      el.innerHTML = '<div class="empty">Nenhum cliente cadastrado ainda.</div>';
+      return;
+    }
+    let html = '<table><thead><tr><th>Nome</th><th>Documento</th><th>Telefone</th><th>Cidade/UF</th></tr></thead><tbody>';
+    for (const c of clients) {
+      const cidadeUf = [c.cidade, c.uf].filter(Boolean).join('/') || '-';
+      html += `<tr>
+        <td>${c.name}</td>
+        <td>${c.document ?? '-'}</td>
+        <td>${c.phoneE164 ?? '-'}</td>
+        <td>${cidadeUf}</td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<div class="empty">' + e.message + '</div>';
+  }
+}
+
+async function createClient() {
+  const msgEl = document.getElementById('client-form-msg');
+  msgEl.textContent = '';
+  msgEl.style.color = '';
+  const name = document.getElementById('client-name').value.trim();
+  const phoneE164 = document.getElementById('client-phone').value.trim();
+  if (!name) {
+    msgEl.textContent = 'Informe ao menos o nome do cliente.';
+    msgEl.style.color = 'var(--red)';
+    return;
+  }
+  const body = {
+    name,
+    document: document.getElementById('client-document').value.trim() || undefined,
+    phoneE164: phoneE164 || undefined,
+    email: document.getElementById('client-email').value.trim() || undefined,
+    cep: document.getElementById('client-cep').value.trim() || undefined,
+    endereco: document.getElementById('client-endereco').value.trim() || undefined,
+    numero: document.getElementById('client-numero').value.trim() || undefined,
+    bairro: document.getElementById('client-bairro').value.trim() || undefined,
+    cidade: document.getElementById('client-cidade').value.trim() || undefined,
+    uf: document.getElementById('client-uf').value.trim() || undefined,
+    whatsappOptIn: true,
+  };
+  try {
+    await api('/clients', { method: 'POST', body: JSON.stringify(body) });
+    msgEl.style.color = 'var(--green)';
+    msgEl.textContent = 'Cliente cadastrado com sucesso!';
+    ['name', 'document', 'phone', 'email', 'cep', 'endereco', 'numero', 'bairro', 'cidade', 'uf']
+      .forEach((f) => (document.getElementById('client-' + f).value = ''));
+    loadClients();
+  } catch (e) {
+    msgEl.style.color = 'var(--red)';
+    msgEl.textContent = 'Erro ao cadastrar: ' + e.message;
   }
 }
 
