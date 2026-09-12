@@ -125,9 +125,13 @@
   .msg .meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
   .empty { color: var(--muted); text-align: center; padding: 30px 0; }
   .loading { color: var(--muted); text-align: center; padding: 30px 0; }
+  .import-log { max-height: 260px; overflow-y: auto; font-size: 13px; margin-top: 10px; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; }
+  .import-log .ok { color: var(--green); }
+  .import-log .fail { color: var(--red); }
 </style>
 </head>
 <body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <div id="login-screen">
   <h2>CECIM - Painel de Cobrança</h2>
@@ -157,6 +161,15 @@
     </nav>
 
     <div id="tab-clients" class="tab" style="display:none;">
+      <div class="card">
+        <h3 style="margin-top:0;">Importar planilha (clientes + cobranças)</h3>
+        <p style="font-size:13px; color:var(--muted); margin-top:-6px;">
+          Aceita .xlsx com as colunas: seu_numero, nome_pagador, cpf_cnpj, telefone, cep, logradouro, numero, bairro, cidade, uf, valor, dia_vencimento.
+          O telefone deve ter DDD (ex: 94992453959) - o +55 é adicionado automaticamente.
+        </p>
+        <input type="file" id="import-file" accept=".xlsx,.xls" onchange="handleImportFile(event)" />
+        <div id="import-preview"></div>
+      </div>
       <div class="card">
         <h3 style="margin-top:0;">Novo cliente</h3>
         <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px;">
@@ -394,6 +407,156 @@ async function createClient() {
     msgEl.style.color = 'var(--red)';
     msgEl.textContent = 'Erro ao cadastrar: ' + e.message;
   }
+}
+
+// --- Importação em massa (planilha) ---
+
+function onlyDigitsStr(v) {
+  return String(v ?? '').replace(/\D/g, '');
+}
+
+function normalizeDocument(raw) {
+  let d = onlyDigitsStr(raw);
+  if (!d) return '';
+  if (d.length < 11) d = d.padStart(11, '0'); // CPF sem os zeros à esquerda
+  else if (d.length > 11 && d.length < 14) d = d.padStart(14, '0'); // CNPJ sem os zeros à esquerda
+  return d;
+}
+
+function normalizePhone(raw) {
+  const d = onlyDigitsStr(raw);
+  if (!d) return '';
+  return '+55' + d;
+}
+
+function valorParaCentavos(raw) {
+  if (raw === null || raw === undefined || raw === '') return null;
+  const normalizado = String(raw).replace(/\./g, '').replace(',', '.');
+  const num = Number(normalizado);
+  if (Number.isNaN(num)) return null;
+  return Math.round(num * 100);
+}
+
+function calcularProximoVencimento(diaVencimento) {
+  const dia = Number(diaVencimento);
+  if (!dia || dia < 1 || dia > 28) return null; // evita problema com meses curtos
+  const hoje = new Date();
+  let ano = hoje.getFullYear();
+  let mes = hoje.getMonth(); // 0-indexado
+  if (dia < hoje.getDate()) {
+    mes += 1;
+    if (mes > 11) { mes = 0; ano += 1; }
+  }
+  const mm = String(mes + 1).padStart(2, '0');
+  const dd = String(dia).padStart(2, '0');
+  return `${ano}-${mm}-${dd}`;
+}
+
+let importRows = [];
+
+function handleImportFile(event) {
+  const file = event.target.files[0];
+  const previewEl = document.getElementById('import-preview');
+  if (!file) return;
+  previewEl.innerHTML = '<div class="loading">Lendo planilha...</div>';
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rawRows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+      importRows = rawRows
+        .filter((r) => r.nome_pagador)
+        .map((r) => ({
+          nome: String(r.nome_pagador).trim(),
+          document: normalizeDocument(r.cpf_cnpj),
+          phone: normalizePhone(r.telefone),
+          cep: onlyDigitsStr(r.cep),
+          endereco: r.logradouro ? String(r.logradouro).trim() : '',
+          numero: r.numero ? String(r.numero).trim() : 'SN',
+          bairro: r.bairro ? String(r.bairro).trim() : '',
+          cidade: r.cidade ? String(r.cidade).trim() : '',
+          uf: r.uf ? String(r.uf).trim().toUpperCase() : '',
+          amountCents: valorParaCentavos(r.valor),
+          dueDate: calcularProximoVencimento(r.dia_vencimento),
+        }));
+      renderImportPreview();
+    } catch (err) {
+      previewEl.innerHTML = '<div class="empty">Erro ao ler o arquivo: ' + err.message + '</div>';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function renderImportPreview() {
+  const previewEl = document.getElementById('import-preview');
+  if (!importRows.length) {
+    previewEl.innerHTML = '<div class="empty">Nenhuma linha válida encontrada na planilha.</div>';
+    return;
+  }
+  let html = `<p style="font-size:13px;">${importRows.length} cliente(s) encontrado(s) na planilha. Confira antes de importar:</p>
+    <div style="max-height:260px; overflow-y:auto;">
+    <table><thead><tr><th>Nome</th><th>Documento</th><th>Telefone</th><th>Valor</th><th>Vencimento</th></tr></thead><tbody>`;
+  for (const r of importRows) {
+    html += `<tr>
+      <td>${r.nome}</td>
+      <td>${r.document || '<span style="color:var(--red)">faltando</span>'}</td>
+      <td>${r.phone || '<span style="color:var(--red)">faltando</span>'}</td>
+      <td>${r.amountCents != null ? fmtMoney(r.amountCents) : '<span style="color:var(--red)">inválido</span>'}</td>
+      <td>${r.dueDate ? fmtDate(r.dueDate) : '<span style="color:var(--red)">inválido</span>'}</td>
+    </tr>`;
+  }
+  html += `</tbody></table></div>
+    <button style="margin-top:12px;" onclick="runImport()">Confirmar importação (cria cliente + cobrança de cada linha)</button>
+    <div id="import-log" class="import-log"></div>`;
+  previewEl.innerHTML = html;
+}
+
+async function runImport() {
+  const logEl = document.getElementById('import-log');
+  logEl.innerHTML = '';
+  for (const r of importRows) {
+    const line = document.createElement('div');
+    line.textContent = 'Importando ' + r.nome + '...';
+    logEl.appendChild(line);
+    try {
+      const client = await api('/clients', {
+        method: 'POST',
+        body: JSON.stringify({
+          name: r.nome,
+          document: r.document || undefined,
+          phoneE164: r.phone || undefined,
+          cep: r.cep || undefined,
+          endereco: r.endereco || undefined,
+          numero: r.numero || undefined,
+          bairro: r.bairro || undefined,
+          cidade: r.cidade || undefined,
+          uf: r.uf || undefined,
+          whatsappOptIn: true,
+        }),
+      });
+      if (r.amountCents != null && r.dueDate) {
+        await api('/charges', {
+          method: 'POST',
+          body: JSON.stringify({
+            clientId: client.id,
+            amountCents: r.amountCents,
+            dueDate: r.dueDate,
+            description: 'Mensalidade',
+          }),
+        });
+        line.textContent = 'OK: ' + r.nome + ' (cliente + cobrança criados)';
+      } else {
+        line.textContent = 'OK: ' + r.nome + ' (só cliente - valor/vencimento inválido, sem cobrança)';
+      }
+      line.className = 'ok';
+    } catch (e) {
+      line.textContent = 'ERRO em ' + r.nome + ': ' + e.message;
+      line.className = 'fail';
+    }
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+  loadClients();
 }
 
 let selectedChargeIds = new Set();
