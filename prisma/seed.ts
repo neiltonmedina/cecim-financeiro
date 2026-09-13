@@ -25,9 +25,9 @@ const DEFAULT_TEMPLATES: Array<{
     type: TemplateType.LEMBRETE_VENCIMENTO,
     name: 'WhatsApp - Lembrete de vencimento',
     body:
-      'Olá {{cliente}}, passando para lembrar que sua cobrança de {{valor}} ("{{descricao}}") vence em {{vencimento}}. ' +
-      'Responda *1* para Pix ou *2* para o boleto: {{linkPagamento}}',
-    providerTemplateName: 'cecim_hoje_',
+      'Olá {{cliente}}, seu boleto de {{valor}} tem o vencimento hoje. ' +
+      'Verifique no seu banco se o boleto já está disponível. Ignore esta mensagem se você já pagou.',
+    providerTemplateName: 'lembrete_vencimento_cecim',
   },
   {
     channel: Channel.WHATSAPP,
