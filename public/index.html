@@ -587,14 +587,12 @@ function valorParaCentavos(raw) {
 function calcularProximoVencimento(diaVencimento) {
   const dia = Number(diaVencimento);
   if (!dia || dia < 1 || dia > 28) return null; // evita problema com meses curtos
+  // Usa o dia informado dentro do mês atual - se o dia já passou, a cobrança
+  // fica com vencimento no passado mesmo (é uma mensalidade já vencida/em
+  // atraso), não é empurrada pro mês seguinte.
   const hoje = new Date();
-  let ano = hoje.getFullYear();
-  let mes = hoje.getMonth(); // 0-indexado
-  if (dia < hoje.getDate()) {
-    mes += 1;
-    if (mes > 11) { mes = 0; ano += 1; }
-  }
-  const mm = String(mes + 1).padStart(2, '0');
+  const ano = hoje.getFullYear();
+  const mm = String(hoje.getMonth() + 1).padStart(2, '0');
   const dd = String(dia).padStart(2, '0');
   return `${ano}-${mm}-${dd}`;
 }

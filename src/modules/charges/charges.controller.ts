@@ -6,6 +6,7 @@ import { ChargesService } from './charges.service';
 import { CreateChargeDto } from './dto/create-charge.dto';
 import { CreateBulkChargesDto } from './dto/create-bulk-charges.dto';
 import { DispatchChargesDto } from './dto/dispatch-charges.dto';
+import { UpdateChargeDto } from './dto/update-charge.dto';
 
 @ApiTags('charges')
 @ApiBearerAuth()
@@ -38,6 +39,12 @@ export class ChargesController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.chargesService.findOne(id);
+  }
+
+  /** Corrige dados básicos (data, valor, descrição) de uma cobrança já criada. */
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() dto: UpdateChargeDto) {
+    return this.chargesService.update(id, dto);
   }
 
   @Patch(':id/paid')

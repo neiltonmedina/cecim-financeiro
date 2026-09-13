@@ -7,6 +7,7 @@ import { BoletosService } from '../boletos/boletos.service';
 import { CreateChargeDto } from './dto/create-charge.dto';
 import { CreateBulkChargesDto } from './dto/create-bulk-charges.dto';
 import { DispatchChargesDto } from './dto/dispatch-charges.dto';
+import { UpdateChargeDto } from './dto/update-charge.dto';
 
 @Injectable()
 export class ChargesService {
@@ -75,6 +76,32 @@ export class ChargesService {
       include: { client: true, notifications: { orderBy: { queuedAt: 'desc' } } },
     });
     if (!charge) throw new NotFoundException('Cobrança não encontrada');
+    return charge;
+  }
+
+  /**
+   * Atualiza dados básicos da cobrança (útil para corrigir data/valor de
+   * cobranças de teste ou importadas errado). Se a data de vencimento mudar
+   * e o boleto já tiver sido gerado no Inter, regenera o boleto com a nova
+   * data.
+   */
+  async update(id: string, dto: UpdateChargeDto) {
+    const existing = await this.findOne(id);
+    const dueDateChanged = dto.dueDate && new Date(dto.dueDate).getTime() !== existing.dueDate.getTime();
+
+    const charge = await this.prisma.charge.update({
+      where: { id },
+      data: {
+        description: dto.description,
+        amountCents: dto.amountCents,
+        dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
+      },
+    });
+
+    if (dueDateChanged && this.boletosService.isConfigured()) {
+      const client = await this.prisma.client.findUnique({ where: { id: charge.clientId } });
+      if (client) return this.boletosService.gerarBoletoParaCobranca(charge, client);
+    }
     return charge;
   }
 
