@@ -258,6 +258,23 @@
 
     <div id="tab-charges" class="tab">
       <div class="card">
+        <h3 style="margin-top:0;">Nova cobrança de teste</h3>
+        <p style="font-size:12px; color:var(--muted); margin-top:-6px;">
+          O Inter não aceita boleto com vencimento no passado - use hoje ou uma data futura.
+          Para testar o cenário de "vencida", crie com vencimento hoje e espere o dia seguinte:
+          o valor com multa/mora já vem calculado automaticamente pelo Inter.
+        </p>
+        <div class="filters">
+          <select id="test-charge-client" style="min-width:220px;"></select>
+          <input id="test-charge-desc" type="text" placeholder="Descrição" value="Mensalidade" style="max-width:160px;" />
+          <input id="test-charge-amount" type="text" placeholder="Valor (ex: 5,00)" value="5,00" style="max-width:120px;" />
+          <input id="test-charge-duedate" type="date" />
+          <button onclick="createTestCharge()">Criar cobrança</button>
+        </div>
+        <div id="test-charge-msg" style="font-size:13px; margin-top:6px;"></div>
+      </div>
+
+      <div class="card">
         <div class="filters">
           <select id="charge-status-filter" onchange="loadCharges()">
             <option value="">Todos os status</option>
@@ -704,6 +721,61 @@ async function runImport() {
   loadClients();
 }
 
+async function populateTestChargeClientSelect() {
+  const sel = document.getElementById('test-charge-client');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Carregando clientes...</option>';
+  try {
+    const clients = await api('/clients');
+    if (!clients.length) {
+      sel.innerHTML = '<option value="">Nenhum cliente cadastrado</option>';
+      return;
+    }
+    sel.innerHTML = clients.map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
+  } catch (e) {
+    sel.innerHTML = '<option value="">Erro ao carregar clientes</option>';
+  }
+  const dueDateEl = document.getElementById('test-charge-duedate');
+  if (dueDateEl && !dueDateEl.value) {
+    const hoje = new Date();
+    const iso = hoje.getFullYear() + '-' + String(hoje.getMonth() + 1).padStart(2, '0') + '-' + String(hoje.getDate()).padStart(2, '0');
+    dueDateEl.value = iso;
+  }
+}
+
+async function createTestCharge() {
+  const msgEl = document.getElementById('test-charge-msg');
+  msgEl.textContent = '';
+  msgEl.style.color = '';
+  const clientId = document.getElementById('test-charge-client').value;
+  const description = document.getElementById('test-charge-desc').value.trim() || 'Mensalidade';
+  const amountCents = valorParaCentavos(document.getElementById('test-charge-amount').value);
+  const dueDate = document.getElementById('test-charge-duedate').value;
+  if (!clientId) {
+    msgEl.textContent = 'Selecione um cliente.';
+    msgEl.style.color = 'var(--red)';
+    return;
+  }
+  if (!amountCents || !dueDate) {
+    msgEl.textContent = 'Informe valor e vencimento válidos.';
+    msgEl.style.color = 'var(--red)';
+    return;
+  }
+  msgEl.textContent = 'Criando cobrança (e gerando boleto no Inter)...';
+  try {
+    await api('/charges', {
+      method: 'POST',
+      body: JSON.stringify({ clientId, description, amountCents, dueDate }),
+    });
+    msgEl.textContent = 'Cobrança criada com sucesso!';
+    msgEl.style.color = 'var(--green, #16a34a)';
+    loadCharges();
+  } catch (e) {
+    msgEl.textContent = 'Erro: ' + e.message;
+    msgEl.style.color = 'var(--red)';
+  }
+}
+
 let selectedChargeIds = new Set();
 
 function updateCampaignCount() {
@@ -721,6 +793,7 @@ async function loadCharges() {
   const status = document.getElementById('charge-status-filter').value;
   selectedChargeIds = new Set();
   updateCampaignCount();
+  populateTestChargeClientSelect();
   try {
     const qs = status ? '?status=' + status : '';
     const charges = await api('/charges' + qs);
