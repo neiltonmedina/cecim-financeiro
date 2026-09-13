@@ -83,11 +83,17 @@ export class ChargesService {
    * Atualiza dados básicos da cobrança (útil para corrigir data/valor de
    * cobranças de teste ou importadas errado). Se a data de vencimento mudar
    * e o boleto já tiver sido gerado no Inter, regenera o boleto com a nova
-   * data.
+   * data - EXCETO quando a nova data está no passado, pois o Inter rejeita
+   * `dataVencimento` anterior a hoje (não é possível "nascer" um boleto já
+   * vencido). Nesse caso mantemos o boleto/Pix já existente (gerado com a
+   * data original) intacto, só corrigindo a data local da cobrança - útil
+   * para testar o fluxo de mensagens de cobrança vencida sem quebrar o
+   * boleto real.
    */
   async update(id: string, dto: UpdateChargeDto) {
     const existing = await this.findOne(id);
     const dueDateChanged = dto.dueDate && new Date(dto.dueDate).getTime() !== existing.dueDate.getTime();
+    const newDueDateIsPast = dto.dueDate && new Date(dto.dueDate).getTime() < new Date(new Date().toDateString()).getTime();
 
     const charge = await this.prisma.charge.update({
       where: { id },
@@ -98,7 +104,7 @@ export class ChargesService {
       },
     });
 
-    if (dueDateChanged && this.boletosService.isConfigured()) {
+    if (dueDateChanged && !newDueDateIsPast && this.boletosService.isConfigured()) {
       const client = await this.prisma.client.findUnique({ where: { id: charge.clientId } });
       if (client) return this.boletosService.gerarBoletoParaCobranca(charge, client);
     }
