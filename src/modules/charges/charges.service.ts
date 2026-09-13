@@ -101,6 +101,10 @@ export class ChargesService {
         description: dto.description,
         amountCents: dto.amountCents,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
+        // Limpa erro de tentativa anterior de regeneração, já que desta vez
+        // nem tentamos (ou vamos tentar de novo logo abaixo, com sucesso ou
+        // um novo erro que substitui este).
+        boletoErro: dueDateChanged ? null : undefined,
       },
     });
 
