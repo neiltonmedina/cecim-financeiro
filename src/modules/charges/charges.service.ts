@@ -148,6 +148,12 @@ export class ChargesService {
       );
     }
 
+    // Completa a linha digitável de cobranças antigas que ainda não a tinham salva,
+    // antes de qualquer disparo - evita cair no fallback do Pix no lugar dela no template.
+    if (this.boletosService.isConfigured()) {
+      await Promise.all(charges.map((c) => this.boletosService.garantirLinhaDigitavel(c)));
+    }
+
     const templateType = dto.templateType ?? TemplateType.COBRANCA_PENDENTE;
     const intervalDays = dto.intervalDays ?? 5;
     const results = await this.notificationsService.dispatchCharges(dto.chargeIds, {

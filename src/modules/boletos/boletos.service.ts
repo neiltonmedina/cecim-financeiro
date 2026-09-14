@@ -71,4 +71,32 @@ export class BoletosService {
       });
     }
   }
+
+  /**
+   * Garante que a cobrança tem a linha digitável salva localmente, buscando
+   * no Inter quando já existe um boleto criado mas a linha digitável nunca
+   * foi capturada (cobranças antigas, anteriores a esse campo existir).
+   * Importante: sem isso, o disparo por WhatsApp cai no fallback do Pix no
+   * lugar da linha digitável no template, o que fica errado/confuso pro
+   * cliente - por isso isso deve rodar antes de qualquer disparo.
+   */
+  async garantirLinhaDigitavel(charge: Charge): Promise<Charge> {
+    if (charge.linhaDigitavel || !charge.boletoCodigoSolicitacao || !this.inter.isConfigured()) {
+      return charge;
+    }
+    try {
+      const { pixCopiaECola, linhaDigitavel } = await this.inter.consultarDetalhes(charge.boletoCodigoSolicitacao);
+      if (!linhaDigitavel) return charge;
+      return this.prisma.charge.update({
+        where: { id: charge.id },
+        data: {
+          linhaDigitavel,
+          pixCopiaECola: pixCopiaECola ?? charge.pixCopiaECola,
+        },
+      });
+    } catch (error: any) {
+      this.logger.warn(`Não foi possível completar linha digitável da cobrança ${charge.id}: ${error.message}`);
+      return charge;
+    }
+  }
 }

@@ -175,6 +175,22 @@ export class InterBoletoProvider {
   }
 
   /**
+   * Consulta os dados (Pix copia-e-cola e linha digitável) de um boleto já
+   * existente no Inter, sem criar um novo - usado para completar cobranças
+   * antigas que não tinham a linha digitável salva localmente.
+   */
+  async consultarDetalhes(codigoSolicitacao: string): Promise<{ pixCopiaECola?: string; linhaDigitavel?: string }> {
+    const token = await this.getAccessToken();
+    const detalhes = await this.getClient().get(`/cobranca/v3/cobrancas/${codigoSolicitacao}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return {
+      pixCopiaECola: detalhes.data?.pix?.pixCopiaECola,
+      linhaDigitavel: detalhes.data?.boleto?.linhaDigitavel,
+    };
+  }
+
+  /**
    * Registra a URL de callback de pagamento no Inter (uma vez só, configuração
    * inicial). Se o Inter já tiver outra URL registrada, isso a substitui.
    *
