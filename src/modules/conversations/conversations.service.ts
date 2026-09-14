@@ -11,6 +11,19 @@ function normalizePhone(raw: string): string {
   return digits.startsWith('+') ? digits : `+${digits}`;
 }
 
+/**
+ * A API do WhatsApp às vezes entrega o número do celular brasileiro sem o
+ * "9" extra (ex: +559991646386 em vez de +5599991646386) - gera aqui a
+ * variação alternativa (com/sem o 9) para tentar achar o cliente mesmo
+ * quando o formato não bate exatamente com o cadastrado.
+ */
+function alternativeBrPhone(phone: string): string | null {
+  const match = phone.match(/^\+55(\d{2})(\d{8,9})$/);
+  if (!match) return null;
+  const [, ddd, numero] = match;
+  return numero.length === 9 ? `+55${ddd}${numero.slice(1)}` : `+55${ddd}9${numero}`;
+}
+
 @Injectable()
 export class ConversationsService {
   private readonly logger = new Logger(ConversationsService.name);
@@ -60,8 +73,11 @@ export class ConversationsService {
   /** Processa uma mensagem recebida do cliente via WhatsApp. */
   async handleInboundWhatsApp(fromPhoneRaw: string, text: string) {
     const phone = normalizePhone(fromPhoneRaw);
+    const altPhone = alternativeBrPhone(phone);
 
-    const client = await this.prisma.client.findFirst({ where: { phoneE164: phone } });
+    const client = await this.prisma.client.findFirst({
+      where: altPhone ? { phoneE164: { in: [phone, altPhone] } } : { phoneE164: phone },
+    });
     if (!client) {
       this.logger.warn(`Mensagem recebida de número não cadastrado: ${phone}`);
       return;
