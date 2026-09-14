@@ -15,8 +15,10 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { BoletosModule } from './modules/boletos/boletos.module';
 import { SchedulerModule } from './modules/scheduler/scheduler.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
+import { LegalController } from './legal.controller';
 
 @Module({
+  controllers: [LegalController],
   imports: [
     ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
     ScheduleModule.forRoot(),
