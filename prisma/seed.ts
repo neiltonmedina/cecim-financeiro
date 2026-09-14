@@ -15,9 +15,12 @@ const DEFAULT_TEMPLATES: Array<{
     channel: Channel.WHATSAPP,
     type: TemplateType.COBRANCA_PENDENTE,
     name: 'WhatsApp - Cobrança pendente',
+    // Texto igual ao aprovado de verdade no Meta (template cobranca_cecim) - este campo
+    // é só referência interna, quem manda a mensagem de fato é o Meta usando esse template.
     body:
-      'Olá {{cliente}}! Você tem uma cobrança de {{valor}} referente a "{{descricao}}", com vencimento em {{vencimento}}. ' +
-      'Responda *1* para receber o Pix ou *2* para o boleto: {{linkPagamento}}',
+      'Olá {{cliente}}! Identificamos um boleto em aberto no nosso sistema. Se precisar, podemos: ' +
+      'reenviar o boleto; ajudar com a forma de pagamento. Segue a linha digitável do seu boleto, ' +
+      'com valor atualizado para pagamento: {{linhaDigitavel}} Responda 1 para receber o código Pix, ou 2 para o boleto atualizado.',
     providerTemplateName: 'cobranca_cecim',
   },
   {

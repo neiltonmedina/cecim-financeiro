@@ -1,4 +1,4 @@
-import { ArrayMinSize, IsArray, IsBoolean, IsEnum, IsIn, IsOptional, IsUUID } from 'class-validator';
+import { ArrayMinSize, IsArray, IsBoolean, IsEnum, IsInt, IsOptional, IsPositive, IsUUID } from 'class-validator';
 import { Channel, TemplateType } from '@prisma/client';
 
 export class DispatchChargesDto {
@@ -20,11 +20,12 @@ export class DispatchChargesDto {
 
   /**
    * Intervalo (em dias) entre os contatos da régua de cobrança (lembrete,
-   * 3ª tentativa, etc.), definido no painel antes de confirmar o disparo
-   * da campanha. Valores permitidos: 5, 10 ou 15 dias.
+   * 3ª tentativa, etc.), definido manualmente no painel antes de confirmar
+   * o disparo da campanha - qualquer número de dias é aceito.
    */
   @IsOptional()
-  @IsIn([5, 10, 15])
+  @IsInt()
+  @IsPositive()
   intervalDays?: number;
 
   /**

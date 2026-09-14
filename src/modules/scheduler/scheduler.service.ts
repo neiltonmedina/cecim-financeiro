@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { TemplateType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { WhatsAppProvider } from '../notifications/providers/whatsapp.provider';
@@ -27,17 +26,18 @@ export class SchedulerService {
     private readonly whatsapp: WhatsAppProvider,
   ) {}
 
-  /** Todos os dias às 08:00 (America/Sao_Paulo), envia lembretes e cobranças automáticas. */
+  /**
+   * Todos os dias às 08:00 (America/Sao_Paulo): mantém o status das
+   * cobranças em dia e avança as conversas já em andamento conforme o
+   * intervalo definido manualmente ao confirmar cada campanha.
+   *
+   * O disparo inicial de cobrança NUNCA é automático - é sempre feito
+   * manualmente pelo painel (dias definidos por quem confirma o disparo).
+   */
   @Cron(CronExpression.EVERY_DAY_AT_8AM, { timeZone: 'America/Sao_Paulo' })
   async runDailyReminders() {
-    this.logger.log('Executando rotina diária de lembretes/cobranças automáticas...');
+    this.logger.log('Executando rotina diária de manutenção...');
     await this.markOverdueCharges();
-
-    const rules = await this.prisma.reminderRule.findMany({ where: { active: true } });
-    for (const rule of rules) {
-      await this.dispatchForRule(rule.offsetDays, rule.templateType);
-    }
-
     await this.advanceStaleConversations();
   }
 
@@ -115,22 +115,4 @@ export class SchedulerService {
     }
   }
 
-  private async dispatchForRule(offsetDays: number, templateType: TemplateType) {
-    const target = startOfDay(addDays(new Date(), offsetDays));
-    const nextDay = addDays(target, 1);
-
-    const charges = await this.prisma.charge.findMany({
-      where: {
-        status: { in: ['PENDENTE', 'VENCIDA'] },
-        dueDate: { gte: target, lt: nextDay },
-        client: { active: true },
-      },
-    });
-
-    if (!charges.length) return;
-
-    const chargeIds = charges.map((c) => c.id);
-    this.logger.log(`Disparando ${templateType} (offset ${offsetDays}d) para ${chargeIds.length} cobrança(s).`);
-    await this.notificationsService.dispatchCharges(chargeIds, { templateType });
-  }
 }

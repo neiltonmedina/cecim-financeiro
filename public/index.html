@@ -289,12 +289,8 @@
 
         <div id="campaign-bar" style="display:flex; align-items:center; gap:10px; margin-bottom:14px; padding:10px 12px; background:#eef2ff; border-radius:8px; flex-wrap:wrap;">
           <strong id="campaign-count" style="font-size:13px;">0 selecionada(s)</strong>
-          <label style="font-size:13px; color:var(--muted);">Intervalo entre contatos:</label>
-          <select id="campaign-interval">
-            <option value="5" selected>5 dias</option>
-            <option value="10">10 dias</option>
-            <option value="15">15 dias</option>
-          </select>
+          <label style="font-size:13px; color:var(--muted);">Intervalo entre contatos (dias):</label>
+          <input id="campaign-interval" type="number" min="1" step="1" value="5" style="width:70px;" />
           <button onclick="confirmarCampanha()">Confirmar e disparar</button>
           <span style="font-size:12px; color:var(--muted);">O disparo só ocorre após você confirmar aqui - nada é enviado sozinho.</span>
         </div>
@@ -507,7 +503,11 @@ async function loadTemplates() {
   const el = document.getElementById('messages-content');
   el.innerHTML = '<div class="loading">Carregando...</div>';
   try {
-    const templates = await api('/templates');
+    const all = await api('/templates');
+    // Mostra só o que está de fato em uso hoje: WhatsApp / cobrança pendente
+    // (o único template aprovado e testado). SMS e e-mail ficam ocultos até
+    // serem configurados e testados de verdade.
+    const templates = all.filter((t) => t.channel === 'WHATSAPP' && t.type === 'COBRANCA_PENDENTE');
     if (!templates.length) {
       el.innerHTML = '<div class="empty">Nenhum template cadastrado.</div>';
       return;
@@ -826,6 +826,10 @@ async function confirmarCampanha() {
     return;
   }
   const intervalDays = Number(document.getElementById('campaign-interval').value);
+  if (!intervalDays || intervalDays < 1) {
+    alert('Informe um número de dias válido para o intervalo entre contatos.');
+    return;
+  }
   const ok = confirm(
     `Confirma o disparo da campanha para ${selectedChargeIds.size} cliente(s) selecionado(s), ` +
     `com intervalo de ${intervalDays} dias entre os contatos?`
@@ -837,6 +841,7 @@ async function confirmarCampanha() {
       method: 'POST',
       body: JSON.stringify({
         chargeIds: Array.from(selectedChargeIds),
+        channels: ['WHATSAPP'],
         intervalDays,
         confirmado: true,
       }),
