@@ -30,7 +30,11 @@ export class WhatsAppProvider implements ChannelProvider {
     }
 
     const to = input.destination.replace('+', '');
-    const templateName = input.providerTemplateName ?? this.config.get<string>('whatsapp.templateName');
+    // Nunca cai num template "padrão" por conta própria: fora do disparo inicial (que
+    // sempre informa providerTemplateName explicitamente), estamos dentro da janela de
+    // 24h de conversa e o envio deve ser texto livre - um template teria parâmetros
+    // fixos que não batem com o texto dinâmico da conversa (agente/opções 1 e 2).
+    const templateName = input.providerTemplateName;
 
     const payload = templateName
       ? {
