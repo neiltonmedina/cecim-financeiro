@@ -76,7 +76,10 @@ export class ConversationsService {
     const altPhone = alternativeBrPhone(phone);
 
     const client = await this.prisma.client.findFirst({
-      where: altPhone ? { phoneE164: { in: [phone, altPhone] } } : { phoneE164: phone },
+      where: {
+        active: true,
+        ...(altPhone ? { phoneE164: { in: [phone, altPhone] } } : { phoneE164: phone }),
+      },
     });
     if (!client) {
       this.logger.warn(`Mensagem recebida de número não cadastrado: ${phone}`);
