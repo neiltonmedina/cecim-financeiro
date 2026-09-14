@@ -7,6 +7,7 @@ import { NotificationsProcessor } from './notifications.processor';
 import { WhatsAppProvider } from './providers/whatsapp.provider';
 import { SmsTwilioProvider } from './providers/sms-twilio.provider';
 import { EmailSmtpProvider } from './providers/email-smtp.provider';
+import { WhatsAppAdminController } from './whatsapp-admin.controller';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { EmailSmtpProvider } from './providers/email-smtp.provider';
       }),
     }),
   ],
+  controllers: [WhatsAppAdminController],
   providers: [NotificationsService, NotificationsProcessor, WhatsAppProvider, SmsTwilioProvider, EmailSmtpProvider],
   exports: [NotificationsService, WhatsAppProvider, EmailSmtpProvider],
 })

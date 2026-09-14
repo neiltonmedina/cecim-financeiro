@@ -77,4 +77,32 @@ export class WhatsAppProvider implements ChannelProvider {
     const providerMessageId = data?.messages?.[0]?.id ?? `whatsapp-${Date.now()}`;
     return { providerMessageId, raw: data };
   }
+
+  /**
+   * Inscreve formalmente este app no recebimento de eventos (mensagens e
+   * status) da conta do WhatsApp Business informada. Isso é diferente de
+   * apenas marcar o campo "messages" como assinado na tela de Webhooks do
+   * app - sem essa chamada, mensagens reais de clientes não chegam no
+   * nosso webhook mesmo com o campo aparecendo "Assinado".
+   */
+  async subscribeApp(wabaId: string): Promise<unknown> {
+    const accessToken = this.config.get<string>('whatsapp.accessToken');
+    const version = this.config.get<string>('whatsapp.apiVersion');
+    if (!accessToken) {
+      throw new Error('WhatsApp não configurado: defina WHATSAPP_ACCESS_TOKEN');
+    }
+
+    const response = await fetch(`https://graph.facebook.com/${version}/${wabaId}/subscribed_apps`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const data = (await response.json().catch(() => ({}))) as any;
+    if (!response.ok) {
+      const errMsg = data?.error?.message ?? `Falha HTTP ${response.status} ao inscrever o app na conta do WhatsApp`;
+      this.logger.error(`Erro ao inscrever app na WABA ${wabaId}: ${errMsg}`);
+      throw new Error(errMsg);
+    }
+    this.logger.log(`App inscrito com sucesso na conta do WhatsApp ${wabaId}.`);
+    return data;
+  }
 }
