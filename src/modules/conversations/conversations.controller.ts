@@ -47,4 +47,10 @@ export class ConversationsController {
   setPaused(@Param('id') id: string, @Body() dto: SetPausedDto) {
     return this.conversationsService.setPaused(id, dto.paused);
   }
+
+  /** Retoma as respostas automáticas de uma conversa escalada para atendimento humano. */
+  @Patch(':id/resume-automation')
+  resumeAutomation(@Param('id') id: string) {
+    return this.conversationsService.resumeAutomation(id);
+  }
 }

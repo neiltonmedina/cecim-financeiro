@@ -54,6 +54,18 @@ export class ConversationsService {
   }
 
   /**
+   * Retoma as respostas automáticas de uma conversa que foi escalada para
+   * atendimento humano (humanRequested = true) - usar depois que o
+   * atendente já respondeu manualmente e quer devolver pro agente.
+   */
+  async resumeAutomation(conversationId: string) {
+    return this.prisma.conversation.update({
+      where: { id: conversationId },
+      data: { humanRequested: false },
+    });
+  }
+
+  /**
    * Chamado quando o pagamento é confirmado (webhook do Inter) - encerra
    * automaticamente a régua daquele cliente para essa cobrança, sem
    * precisar de nenhuma ação manual no painel.
