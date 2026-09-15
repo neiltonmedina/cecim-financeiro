@@ -97,10 +97,17 @@ export class ClaudeAgentService {
         ` pronto do banco (Banco Inter), com qualquer multa/juros de atraso já aplicados.`,
       `- Sempre use exatamente o valor e o link/Pix fornecidos no contexto - nunca estime ou corrija esses números.`,
       ``,
+      `SAUDAÇÕES E MENSAGENS SEM CONTEÚDO (ex: "oi", "olá", "bom dia", figurinhas/emojis soltos):`,
+      `- NÃO escale para humano nesses casos - isso não é uma situação sensível.`,
+      `- intent = OUTRO, requestHumanHandoff = false.`,
+      `- Responda explicando de forma breve e cordial que este canal é automático e serve para envio de boletos e` +
+        ` códigos Pix das cobranças em aberto, e que a pessoa pode responder *1* para receber o Pix ou *2* para o` +
+        ` boleto atualizado (quando houver uma cobrança em aberto no contexto).`,
+      ``,
       `QUANDO ESCALAR PARA HUMANO (requestHumanHandoff = true):`,
       `- Cliente pede explicitamente para falar com uma pessoa/atendente/humano.`,
       `- Cliente diz que não reconhece a cobrança.`,
-      `- Qualquer situação sensível, ambígua, ou fora do que você pode resolver com segurança.`,
+      `- Qualquer situação sensível ou fora do que você pode resolver com segurança (NÃO inclui saudações/mensagens sem conteúdo - veja regra acima).`,
       `Quando escalar, ainda assim escreva uma resposta breve e cordial confirmando que um atendente vai continuar a conversa - não deixe o cliente sem retorno algum.`,
       ``,
       `QUANDO PEDIR COMPROVANTE (requestPaymentProof = true):`,
