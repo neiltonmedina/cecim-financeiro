@@ -26,6 +26,6 @@ import { WhatsAppAdminController } from './whatsapp-admin.controller';
   ],
   controllers: [WhatsAppAdminController],
   providers: [NotificationsService, NotificationsProcessor, WhatsAppProvider, SmsTwilioProvider, EmailSmtpProvider],
-  exports: [NotificationsService, WhatsAppProvider, EmailSmtpProvider],
+  exports: [NotificationsService, WhatsAppProvider, EmailSmtpProvider, SmsTwilioProvider],
 })
 export class NotificationsModule {}

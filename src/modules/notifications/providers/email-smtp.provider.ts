@@ -11,6 +11,10 @@ export class EmailSmtpProvider implements ChannelProvider {
 
   constructor(private readonly config: ConfigService) {}
 
+  isConfigured(): boolean {
+    return !!this.config.get<string>('smtp.host') && !!this.config.get<string>('smtp.user');
+  }
+
   private getTransporter(): nodemailer.Transporter {
     if (!this.transporter) {
       const host = this.config.get<string>('smtp.host');

@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -25,5 +25,22 @@ export class AuthService {
       accessToken: await this.jwtService.signAsync(payload),
       user: { id: user.id, name: user.name, email: user.email, role: user.role },
     };
+  }
+
+  /** Troca a senha do usuário logado - exige a senha atual correta. */
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException('Usuário não encontrado');
+
+    const currentOk = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!currentOk) throw new UnauthorizedException('Senha atual incorreta');
+
+    if (newPassword.length < 8) {
+      throw new BadRequestException('A nova senha deve ter pelo menos 8 caracteres');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+    return { success: true };
   }
 }

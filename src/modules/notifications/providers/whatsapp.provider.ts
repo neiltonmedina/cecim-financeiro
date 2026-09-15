@@ -17,6 +17,10 @@ export class WhatsAppProvider implements ChannelProvider {
 
   constructor(private readonly config: ConfigService) {}
 
+  isConfigured(): boolean {
+    return !!this.config.get<string>('whatsapp.accessToken') && !!this.config.get<string>('whatsapp.phoneNumberId');
+  }
+
   private get apiUrl(): string {
     const version = this.config.get<string>('whatsapp.apiVersion');
     const phoneNumberId = this.config.get<string>('whatsapp.phoneNumberId');

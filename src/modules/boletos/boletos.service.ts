@@ -60,6 +60,10 @@ export class BoletosService {
           boletoErro: null,
           paymentLink: `${appUrl}/boletos/${charge.id}`,
           externalRef: codigoSolicitacao,
+          // Data que foi de fato enviada e aceita pelo Inter nesta criação -
+          // é o que o boleto real tem registrado, independente do que
+          // `dueDate` vier a ser depois (ver comentário no schema).
+          boletoDataVencimento: charge.dueDate,
         },
       });
     } catch (error: any) {

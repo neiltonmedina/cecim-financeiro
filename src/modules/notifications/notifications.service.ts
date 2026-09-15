@@ -20,9 +20,15 @@ export class NotificationsService {
     @InjectQueue(NOTIFICATIONS_QUEUE) private readonly queue: Queue,
   ) {}
 
-  /** Determina para quais canais o cliente pode receber mensagens, dado seu cadastro e opt-in. */
+  /**
+   * Determina para quais canais o cliente pode receber mensagens, dado seu
+   * cadastro e opt-in. Por padrão (sem canais explicitamente pedidos) só usa
+   * WhatsApp e e-mail - SMS fica de fora do padrão porque não está
+   * configurado (falta TWILIO_ACCOUNT_SID/TWILIO_FROM_NUMBER) e sempre falha;
+   * ainda pode ser usado se pedido explicitamente em `requested`.
+   */
   resolveChannelsForClient(client: Client, requested?: Channel[]): Channel[] {
-    const candidates = requested?.length ? requested : ([Channel.WHATSAPP, Channel.SMS, Channel.EMAIL] as Channel[]);
+    const candidates = requested?.length ? requested : ([Channel.WHATSAPP, Channel.EMAIL] as Channel[]);
     return candidates.filter((channel) => {
       if (channel === Channel.WHATSAPP) return client.whatsappOptIn && !!client.phoneE164;
       if (channel === Channel.SMS) return client.smsOptIn && !!client.phoneE164;

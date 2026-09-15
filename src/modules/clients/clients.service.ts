@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
@@ -7,8 +7,32 @@ import { UpdateClientDto } from './dto/update-client.dto';
 export class ClientsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  create(dto: CreateClientDto) {
+  async create(dto: CreateClientDto) {
+    await this.checkDuplicate(dto.document, dto.phoneE164);
     return this.prisma.client.create({ data: dto });
+  }
+
+  /**
+   * Impede cadastrar um cliente ativo com o mesmo CPF/CNPJ ou telefone de
+   * outro já cadastrado - evita duplicidade (já aconteceu de criar dois
+   * cadastros pra mesma pessoa por engano, um deles sem boleto/histórico).
+   */
+  private async checkDuplicate(document?: string, phoneE164?: string, excludeId?: string) {
+    const docDigits = document?.replace(/\D/g, '');
+    const orConditions: any[] = [];
+    if (docDigits) orConditions.push({ document: docDigits });
+    if (phoneE164) orConditions.push({ phoneE164 });
+    if (!orConditions.length) return;
+
+    const existing = await this.prisma.client.findFirst({
+      where: { active: true, OR: orConditions, ...(excludeId ? { id: { not: excludeId } } : {}) },
+    });
+    if (existing) {
+      const campo = existing.document === docDigits ? 'CPF/CNPJ' : 'telefone';
+      throw new ConflictException(
+        `Já existe um cliente ativo (${existing.name}) cadastrado com esse mesmo ${campo}.`,
+      );
+    }
   }
 
   findAll(params: { search?: string; active?: boolean }) {
@@ -35,6 +59,9 @@ export class ClientsService {
 
   async update(id: string, dto: UpdateClientDto) {
     await this.findOne(id);
+    if (dto.document || dto.phoneE164) {
+      await this.checkDuplicate(dto.document, dto.phoneE164, id);
+    }
     return this.prisma.client.update({ where: { id }, data: dto });
   }
 

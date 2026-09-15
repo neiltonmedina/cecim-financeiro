@@ -89,6 +89,12 @@ model Charge {
   pixCopiaECola           String? @db.Text // Pix copia-e-cola retornado junto do boleto pelo Inter
   linhaDigitavel          String? // linha digitável do boleto (para copiar/colar no banco)
   boletoErro              String?
+  // Data de vencimento que foi de fato registrada no boleto do Inter na última
+  // vez que ele foi criado com sucesso. Pode divergir de `dueDate` quando
+  // alguém corrige a data aqui pro passado (ex: testar cobrança vencida) -
+  // nesse caso não regeramos o boleto (Inter não aceita data passada), então
+  // o boleto real continua com a data antiga.
+  boletoDataVencimento    DateTime?
 
   notifications NotificationLog[]
   conversations Conversation[]

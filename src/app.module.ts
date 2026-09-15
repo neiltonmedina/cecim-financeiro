@@ -15,6 +15,7 @@ import { ReportsModule } from './modules/reports/reports.module';
 import { BoletosModule } from './modules/boletos/boletos.module';
 import { SchedulerModule } from './modules/scheduler/scheduler.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
+import { SystemModule } from './modules/system/system.module';
 import { LegalController } from './legal.controller';
 
 @Module({
@@ -38,6 +39,7 @@ import { LegalController } from './legal.controller';
     ChargesModule,
     SchedulerModule,
     WebhooksModule,
+    SystemModule,
   ],
 })
 export class AppModule {}

@@ -15,6 +15,14 @@ export class SmsTwilioProvider implements ChannelProvider {
 
   constructor(private readonly config: ConfigService) {}
 
+  isConfigured(): boolean {
+    return (
+      !!this.config.get<string>('twilio.accountSid') &&
+      !!this.config.get<string>('twilio.authToken') &&
+      !!this.config.get<string>('twilio.fromNumber')
+    );
+  }
+
   private getClient(): Twilio {
     if (!this.client) {
       const accountSid = this.config.get<string>('twilio.accountSid');
