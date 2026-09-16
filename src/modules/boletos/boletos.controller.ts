@@ -33,6 +33,14 @@ export class BoletosController {
     return this.boletosService.consultarWebhookPagamento();
   }
 
+  /** Consulta bruta no Inter por código de solicitação - pra investigar webhooks/pagamentos não reconhecidos. */
+  @Get('consulta-inter/:codigoSolicitacao')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  consultarInter(@Param('codigoSolicitacao') codigoSolicitacao: string) {
+    return this.boletosService.consultarBruto(codigoSolicitacao);
+  }
+
   /**
    * Endpoint público (sem login) para o cliente abrir/baixar o PDF do boleto
    * a partir do link enviado por WhatsApp/SMS/E-mail. O ID da cobrança (UUID)

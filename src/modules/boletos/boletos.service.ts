@@ -18,6 +18,11 @@ export class BoletosService {
     return this.inter.isConfigured();
   }
 
+  /** Consulta bruta no Inter por código de solicitação - útil pra investigar webhooks não reconhecidos. */
+  consultarBruto(codigoSolicitacao: string) {
+    return this.inter.consultarBruto(codigoSolicitacao);
+  }
+
   /** Registra no Inter a URL de callback que recebe a confirmação de pagamento. */
   async registrarWebhookPagamento() {
     if (!this.inter.isConfigured()) {

@@ -190,6 +190,15 @@ export class InterBoletoProvider {
     };
   }
 
+  /** Consulta o retorno completo (bruto) do Inter para uma cobrança - útil pra investigar/depurar. */
+  async consultarBruto(codigoSolicitacao: string): Promise<unknown> {
+    const token = await this.getAccessToken();
+    const detalhes = await this.getClient().get(`/cobranca/v3/cobrancas/${codigoSolicitacao}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return detalhes.data;
+  }
+
   /**
    * Registra a URL de callback de pagamento no Inter (uma vez só, configuração
    * inicial). Se o Inter já tiver outra URL registrada, isso a substitui.
