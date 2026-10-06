@@ -25,6 +25,7 @@ function setup(conversations: any[]) {
     conversation: { findMany: jest.fn().mockResolvedValue(conversations), update: jest.fn() },
     conversationMessage: { create: jest.fn() },
     charge: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
+    notificationLog: { findFirst: jest.fn().mockResolvedValue(null) },
   };
   const whatsapp: any = { send: jest.fn().mockResolvedValue({ providerMessageId: 'x' }) };
   const service = new SchedulerService(prisma, {} as any, whatsapp);
@@ -70,6 +71,17 @@ describe('SchedulerService - régua automática', () => {
     const { service, whatsapp } = setup([makeConversation({ lastInboundAt: new Date(Date.now() - 1 * DIA) })]);
     await service.runDailyReminders();
     expect(whatsapp.send).not.toHaveBeenCalled();
+  });
+
+  it('recupera a data do primeiro envio de conversas antigas (sem lastOutboundAt) e envia o lembrete', async () => {
+    const enviadoEm = new Date(Date.now() - 7 * DIA);
+    const { service, prisma, whatsapp } = setup([makeConversation({ lastOutboundAt: null, chargeId: 'charge-1' })]);
+    prisma.notificationLog.findFirst.mockResolvedValue({ sentAt: enviadoEm });
+
+    await service.runDailyReminders();
+
+    expect(prisma.conversation.update).toHaveBeenCalledWith({ where: { id: 'conv-1' }, data: { lastOutboundAt: enviadoEm } });
+    expect(whatsapp.send).toHaveBeenCalled();
   });
 
   it('marca como vencidas também as cobranças já enviadas', async () => {

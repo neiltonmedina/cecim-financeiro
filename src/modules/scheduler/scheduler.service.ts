@@ -63,6 +63,21 @@ export class SchedulerService {
         await this.prisma.conversation.update({ where: { id: conv.id }, data: { stage: 'ENCERRADA' } });
         continue;
       }
+      // Conversas abertas antes da correção não tinham a data do primeiro contato:
+      // recupera a partir do envio real registrado no histórico de notificações.
+      if (!conv.lastOutboundAt && conv.chargeId) {
+        const ultimoEnvio = await this.prisma.notificationLog.findFirst({
+          where: { chargeId: conv.chargeId, channel: 'WHATSAPP', sentAt: { not: null } },
+          orderBy: { sentAt: 'desc' },
+        });
+        if (ultimoEnvio?.sentAt) {
+          conv.lastOutboundAt = ultimoEnvio.sentAt;
+          await this.prisma.conversation.update({
+            where: { id: conv.id },
+            data: { lastOutboundAt: ultimoEnvio.sentAt },
+          });
+        }
+      }
       // Se o cliente respondeu depois do último envio, não é "sem resposta" - ignora.
       if (conv.lastInboundAt && conv.lastInboundAt > (conv.lastOutboundAt ?? new Date(0))) continue;
       if (!conv.client.phoneE164) continue;
