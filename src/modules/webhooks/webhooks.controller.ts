@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Logger, Post, Query, Res } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, HttpCode, Logger, Post, Query, Res } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { Response } from 'express';
@@ -52,21 +52,25 @@ export class WebhooksController {
    * mensagens recebidas dos clientes - que alimentam o agente de cobrança.
    */
   @Post('whatsapp')
-  async receiveWhatsAppEvent(@Body() body: any) {
+  @HttpCode(200)
+  receiveWhatsAppEvent(@Body() body: any) {
+    // Responde à Meta imediatamente e processa em segundo plano: se a resposta
+    // demora, a Meta reenvia o mesmo evento (o que gerava respostas repetidas).
     const entries = body?.entry ?? [];
     for (const entry of entries) {
       for (const change of entry.changes ?? []) {
         const statuses = change.value?.statuses ?? [];
         for (const status of statuses) {
-          await this.applyWhatsAppStatus(status.id, status.status, status.errors?.[0]?.title);
+          this.applyWhatsAppStatus(status.id, status.status, status.errors?.[0]?.title).catch((err) => {
+            this.logger.error(`Erro ao atualizar status de WhatsApp: ${err.message}`);
+          });
         }
 
         const messages = change.value?.messages ?? [];
         for (const message of messages) {
           const text = message.text?.body;
           if (message.from && text) {
-            // Processado de forma assíncrona: a Meta espera resposta rápida do webhook.
-            this.conversations.handleInboundWhatsApp(message.from, text).catch((err) => {
+            this.conversations.handleInboundWhatsApp(message.from, text, message.id).catch((err) => {
               this.logger.error(`Erro ao processar mensagem do agente: ${err.message}`);
             });
           }

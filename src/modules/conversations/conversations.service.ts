@@ -87,7 +87,15 @@ export class ConversationsService {
   }
 
   /** Processa uma mensagem recebida do cliente via WhatsApp. */
-  async handleInboundWhatsApp(fromPhoneRaw: string, text: string) {
+  async handleInboundWhatsApp(fromPhoneRaw: string, text: string, messageId?: string) {
+    // A Meta pode entregar o mesmo evento mais de uma vez: só processa cada
+    // mensagem uma vez (o insert com chave primária é atômico, então funciona
+    // mesmo com entregas simultâneas).
+    if (messageId && !(await this.marcarComoProcessada(messageId))) {
+      this.logger.log(`Mensagem ${messageId} já processada - entrega duplicada da Meta ignorada.`);
+      return;
+    }
+
     const phone = normalizePhone(fromPhoneRaw);
     const altPhone = alternativeBrPhone(phone);
 
@@ -203,6 +211,17 @@ export class ConversationsService {
 
     if (decision.requestHumanHandoff) {
       await this.notifyHumanEscalation(client.name, phone, text, charge?.description);
+    }
+  }
+
+  /** Registra a mensagem como processada; retorna false se ela já tinha sido processada antes. */
+  private async marcarComoProcessada(messageId: string): Promise<boolean> {
+    try {
+      await this.prisma.processedWhatsAppMessage.create({ data: { id: messageId } });
+      return true;
+    } catch (error: any) {
+      if (error?.code === 'P2002') return false; // violação de chave única: já processada
+      throw error;
     }
   }
 

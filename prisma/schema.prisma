@@ -270,3 +270,12 @@ model Agreement {
   installments    Int?
   confirmedAt    DateTime     @default(now())
 }
+
+/// IDs (wamid) das mensagens recebidas pelo webhook do WhatsApp já processadas.
+/// A Meta pode entregar o mesmo evento mais de uma vez (ex: quando a resposta
+/// do webhook demora) - a chave primária garante que cada mensagem do cliente
+/// gere uma única resposta, mesmo com entregas simultâneas.
+model ProcessedWhatsAppMessage {
+  id        String   @id
+  createdAt DateTime @default(now())
+}
