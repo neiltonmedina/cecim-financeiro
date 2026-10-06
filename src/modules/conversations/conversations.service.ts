@@ -147,12 +147,18 @@ export class ConversationsService {
     // Resposta às opções fechadas (1 = Pix, 2 = boleto atualizado) é determinística -
     // não passa pela IA. O valor com multa/juros já vem pronto do Inter.
     const opcao = text.trim().replace(/[.\s]/g, '');
+    // O código (Pix / linha digitável) vai sempre numa mensagem separada, sozinho:
+    // no WhatsApp, "Copiar" copia a mensagem inteira, então assim o cliente copia
+    // exatamente o código, sem texto junto. (O botão "copiar código" dos templates
+    // da Meta só aceita até 15 caracteres - não serve para Pix nem linha digitável.)
     if (charge && (opcao === '1' || /^pix$/i.test(text.trim()))) {
-      const reply = charge.pixCopiaECola
-        ? `Aqui está o Pix copia-e-cola para pagamento:\n\n${charge.pixCopiaECola}`
-        : 'No momento não temos um Pix disponível para essa cobrança - posso te enviar o boleto atualizado (opção 2)?';
-      await this.logMessage(conversation.id, 'OUTBOUND', reply);
-      await this.whatsapp.send({ destination: phone, body: reply });
+      const mensagens = charge.pixCopiaECola
+        ? [
+            'Segue o Pix copia e cola na próxima mensagem. Toque e segure nela, escolha *Copiar* e cole no app do seu banco, na opção Pix Copia e Cola.',
+            charge.pixCopiaECola,
+          ]
+        : ['No momento não temos um Pix disponível para essa cobrança - posso te enviar o boleto atualizado (opção 2)?'];
+      await this.enviarEmSequencia(conversation.id, phone, mensagens);
       await this.prisma.conversation.update({
         where: { id: conversation.id },
         data: { lastInboundAt: new Date(), lastOutboundAt: new Date() },
@@ -160,11 +166,16 @@ export class ConversationsService {
       return;
     }
     if (charge && (opcao === '2' || /boleto/i.test(text.trim()))) {
-      const reply = charge.paymentLink
-        ? `Segue o boleto atualizado, já com os valores corretos:\n${charge.paymentLink}`
-        : 'Ainda não temos o boleto disponível para essa cobrança - já vou encaminhar para um atendente confirmar.';
-      await this.logMessage(conversation.id, 'OUTBOUND', reply);
-      await this.whatsapp.send({ destination: phone, body: reply });
+      const mensagens = !charge.paymentLink
+        ? ['Ainda não temos o boleto disponível para essa cobrança - já vou encaminhar para um atendente confirmar.']
+        : charge.linhaDigitavel
+          ? [
+              `Segue o boleto atualizado, já com os valores corretos:\n${charge.paymentLink}\n\n` +
+                'A linha digitável vem na próxima mensagem. Toque e segure nela, escolha *Copiar* e cole no app do seu banco.',
+              charge.linhaDigitavel,
+            ]
+          : [`Segue o boleto atualizado, já com os valores corretos:\n${charge.paymentLink}`];
+      await this.enviarEmSequencia(conversation.id, phone, mensagens);
       await this.prisma.conversation.update({
         where: { id: conversation.id },
         data: {
@@ -211,6 +222,14 @@ export class ConversationsService {
 
     if (decision.requestHumanHandoff) {
       await this.notifyHumanEscalation(client.name, phone, text, charge?.description);
+    }
+  }
+
+  /** Envia as mensagens uma de cada vez, na ordem (cada envio espera o anterior), registrando no histórico. */
+  private async enviarEmSequencia(conversationId: string, phone: string, mensagens: string[]) {
+    for (const mensagem of mensagens) {
+      await this.whatsapp.send({ destination: phone, body: mensagem });
+      await this.logMessage(conversationId, 'OUTBOUND', mensagem);
     }
   }
 
