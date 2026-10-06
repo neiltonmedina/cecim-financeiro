@@ -53,6 +53,7 @@ export class SchedulerService {
         humanRequested: false,
         paused: false,
         stage: { in: ['INICIADA', 'LEMBRETE_ENVIADO', 'TERCEIRA_TENTATIVA'] },
+        client: { active: true },
       },
       include: { client: true, charge: true },
     });
