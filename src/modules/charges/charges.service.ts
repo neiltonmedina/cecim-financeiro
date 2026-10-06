@@ -117,12 +117,19 @@ export class ChargesService {
 
   async markAsPaid(id: string) {
     await this.findOne(id);
-    return this.prisma.charge.update({ where: { id }, data: { status: 'PAGA', paidAt: new Date() } });
+    const charge = await this.prisma.charge.update({ where: { id }, data: { status: 'PAGA', paidAt: new Date() } });
+    await this.conversationsService.encerrarPorPagamento(id);
+    return charge;
   }
 
   async cancel(id: string) {
     await this.findOne(id);
-    return this.prisma.charge.update({ where: { id }, data: { status: 'CANCELADA', canceledAt: new Date() } });
+    const charge = await this.prisma.charge.update({
+      where: { id },
+      data: { status: 'CANCELADA', canceledAt: new Date() },
+    });
+    await this.conversationsService.encerrarPorPagamento(id);
+    return charge;
   }
 
   /**
@@ -156,19 +163,26 @@ export class ChargesService {
 
     const templateType = dto.templateType ?? TemplateType.COBRANCA_PENDENTE;
     const intervalDays = dto.intervalDays ?? 5;
-    const results = await this.notificationsService.dispatchCharges(dto.chargeIds, {
-      channels: dto.channels,
-      templateType,
-    });
 
-    // Para os disparos que incluíram WhatsApp, abre a conversa do agente de cobrança
-    // já com o intervalo da régua definido no painel.
-    for (const result of results) {
-      if (result.channelsQueued.includes('WHATSAPP')) {
-        await this.conversationsService.ensureConversationForCharge(result.clientId, result.chargeId, intervalDays);
+    // Abre (ou atualiza) a conversa do agente ANTES de enfileirar o envio: o
+    // processamento da fila marca nela a data do primeiro contato, que é a
+    // referência da régua - se a conversa ainda não existisse, isso se perderia.
+    const clients = await this.prisma.client.findMany({
+      where: { id: { in: charges.map((c) => c.clientId) } },
+    });
+    const clientsById = new Map(clients.map((c) => [c.id, c]));
+    for (const charge of charges) {
+      const client = clientsById.get(charge.clientId);
+      if (!client?.active) continue;
+      const channels = this.notificationsService.resolveChannelsForClient(client, dto.channels);
+      if (channels.includes('WHATSAPP')) {
+        await this.conversationsService.ensureConversationForCharge(charge.clientId, charge.id, intervalDays);
       }
     }
 
-    return results;
+    return this.notificationsService.dispatchCharges(dto.chargeIds, {
+      channels: dto.channels,
+      templateType,
+    });
   }
 }

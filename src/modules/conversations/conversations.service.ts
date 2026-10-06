@@ -41,7 +41,11 @@ export class ConversationsService {
     const existing = await this.prisma.conversation.findFirst({
       where: { clientId, chargeId, stage: { not: 'ENCERRADA' } },
     });
-    if (existing) return existing;
+    // Novo disparo manual sobre conversa já aberta: vale o intervalo escolhido agora.
+    if (existing) {
+      if (existing.intervalDays === intervalDays) return existing;
+      return this.prisma.conversation.update({ where: { id: existing.id }, data: { intervalDays } });
+    }
 
     return this.prisma.conversation.create({
       data: { clientId, chargeId, stage: 'INICIADA', intervalDays },

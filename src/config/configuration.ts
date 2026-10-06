@@ -27,6 +27,8 @@ export default () => ({
     fromNumber: process.env.TWILIO_FROM_NUMBER ?? '',
     statusCallbackUrl: process.env.TWILIO_STATUS_CALLBACK_URL ?? '',
   },
+  // Segredo do gatilho externo da rotina diária (POST /cron/rotina-diaria?token=...).
+  cronSecret: process.env.CRON_SECRET ?? '',
   anthropic: {
     apiKey: process.env.ANTHROPIC_API_KEY ?? '',
   },

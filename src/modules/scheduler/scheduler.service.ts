@@ -58,6 +58,11 @@ export class SchedulerService {
     });
 
     for (const conv of conversations) {
+      // Cobrança já paga/cancelada (ex: baixa manual pelo painel) - não cobra mais.
+      if (!conv.charge || conv.charge.status === 'PAGA' || conv.charge.status === 'CANCELADA') {
+        await this.prisma.conversation.update({ where: { id: conv.id }, data: { stage: 'ENCERRADA' } });
+        continue;
+      }
       // Se o cliente respondeu depois do último envio, não é "sem resposta" - ignora.
       if (conv.lastInboundAt && conv.lastInboundAt > (conv.lastOutboundAt ?? new Date(0))) continue;
       if (!conv.client.phoneE164) continue;
@@ -72,26 +77,27 @@ export class SchedulerService {
         continue;
       }
 
-      const diasAtraso = conv.charge
-        ? Math.max(0, Math.floor((Date.now() - conv.charge.dueDate.getTime()) / (24 * 60 * 60 * 1000)))
-        : null;
-      const opcoes = 'Responda *1* para receber o Pix ou *2* para o boleto atualizado (já com os valores corretos).';
-      const situacaoAtraso = diasAtraso !== null ? ` Está ${diasAtraso} dia(s) em atraso.` : '';
+      const codigo = conv.charge.linhaDigitavel || conv.charge.pixCopiaECola;
+      if (!codigo) {
+        this.logger.warn(`Conversa ${conv.id}: cobrança sem linha digitável/Pix - lembrete não enviado.`);
+        continue;
+      }
 
       const nextStage = conv.stage === 'INICIADA' ? 'LEMBRETE_ENVIADO' : 'TERCEIRA_TENTATIVA';
-      const message =
-        nextStage === 'LEMBRETE_ENVIADO'
-          ? `Olá ${conv.client.name}, passando para lembrar sobre ${
-              conv.charge?.description ?? 'sua cobrança em aberto'
-            }.${situacaoAtraso} ${opcoes}`
-          : `Olá ${conv.client.name}, sua cobrança sobre ${
-              conv.charge?.description ?? ''
-            } segue em aberto.${situacaoAtraso} ${opcoes} Se preferir negociar, me avise por aqui.`;
+      const resumo = `[Lembrete automático - template cobranca_cecim] ${conv.client.name}: ${codigo}`;
 
       try {
-        await this.whatsapp.send({ destination: conv.client.phoneE164, body: message });
+        // Lembrete sempre via template aprovado: fora da janela de 24h desde a última
+        // mensagem do cliente, o WhatsApp rejeita texto livre (erro 131047) - e um
+        // lembrete de régua, por definição, vai pra quem não respondeu.
+        await this.whatsapp.send({
+          destination: conv.client.phoneE164,
+          body: resumo,
+          providerTemplateName: 'cobranca_cecim',
+          templateParams: [conv.client.name, codigo],
+        });
         await this.prisma.conversationMessage.create({
-          data: { conversationId: conv.id, direction: 'OUTBOUND', channel: 'WHATSAPP', content: message },
+          data: { conversationId: conv.id, direction: 'OUTBOUND', channel: 'WHATSAPP', content: resumo },
         });
         await this.prisma.conversation.update({
           where: { id: conv.id },
@@ -103,11 +109,11 @@ export class SchedulerService {
     }
   }
 
-  /** Marca como VENCIDA toda cobrança PENDENTE cujo vencimento já passou. */
+  /** Marca como VENCIDA toda cobrança em aberto (pendente ou já enviada) cujo vencimento já passou. */
   private async markOverdueCharges() {
     const today = startOfDay(new Date());
     const result = await this.prisma.charge.updateMany({
-      where: { status: 'PENDENTE', dueDate: { lt: today } },
+      where: { status: { in: ['PENDENTE', 'ENVIADA'] }, dueDate: { lt: today } },
       data: { status: 'VENCIDA' },
     });
     if (result.count) {

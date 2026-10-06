@@ -79,6 +79,14 @@ export class NotificationsProcessor extends WorkerHost {
         },
       });
       this.logger.log(`${log.channel} enviado com sucesso para ${log.destination} (cobrança ${log.chargeId}).`);
+
+      if (log.channel === 'WHATSAPP') {
+        // A mensagem já foi entregue ao WhatsApp: uma falha aqui não pode virar
+        // retry do job (o cliente receberia a cobrança duplicada).
+        await this.registrarPrimeiroContatoNaConversa(log.charge.clientId, log.chargeId, body).catch((err) =>
+          this.logger.error(`Falha ao registrar contato na conversa (cobrança ${log.chargeId}): ${err.message}`),
+        );
+      }
     } catch (error: any) {
       this.logger.error(`Falha ao enviar ${log.channel} para ${log.destination}: ${error.message}`);
       await this.prisma.notificationLog.update({
@@ -111,5 +119,29 @@ export class NotificationsProcessor extends WorkerHost {
       default:
         return [context.cliente, context.valor, context.vencimento];
     }
+  }
+
+  /**
+   * Marca o contato na conversa (lastOutboundAt) e registra a mensagem no
+   * histórico - sem isso, a rotina diária que avança a régua
+   * (SchedulerService.advanceStaleConversations) nunca tinha uma data de
+   * referência pra contar o intervalo, e o lembrete seguinte nunca disparava
+   * pra quem não respondia de primeira. Um novo disparo manual também
+   * reinicia a contagem a partir de agora.
+   */
+  private async registrarPrimeiroContatoNaConversa(clientId: string, chargeId: string, body: string) {
+    const conversation = await this.prisma.conversation.findFirst({
+      where: { clientId, chargeId, stage: { not: 'ENCERRADA' } },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!conversation) return;
+
+    await this.prisma.conversation.update({
+      where: { id: conversation.id },
+      data: { lastOutboundAt: new Date() },
+    });
+    await this.prisma.conversationMessage.create({
+      data: { conversationId: conversation.id, direction: 'OUTBOUND', channel: 'WHATSAPP', content: body },
+    });
   }
 }
