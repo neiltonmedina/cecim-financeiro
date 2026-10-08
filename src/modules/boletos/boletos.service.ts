@@ -4,6 +4,34 @@ import { Charge, Client } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { InterBoletoProvider } from './inter-boleto.provider';
 
+const DIA_MS = 24 * 60 * 60 * 1000;
+
+/** Data de hoje (YYYY-MM-DD) no fuso de São Paulo. */
+export function hojeSaoPaulo(agora = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(agora);
+}
+
+/**
+ * Valor atualizado de uma cobrança vencida, com as mesmas regras configuradas
+ * no boleto do Inter: multa percentual única + juros de mora mensais
+ * proporcionais aos dias de atraso (taxa mensal / 30 por dia, juros simples).
+ * Sempre calculado sobre o valor e o vencimento ORIGINAIS da cobrança - assim
+ * pedir a segunda via várias vezes nunca gera juros sobre juros.
+ */
+export function calcularValorAtualizado(
+  valorCents: number,
+  vencimentoISO: string,
+  hojeISO: string,
+  multaPercentual: number,
+  moraTaxaMensal: number,
+) {
+  const diasAtraso = Math.max(0, Math.round((Date.parse(hojeISO) - Date.parse(vencimentoISO)) / DIA_MS));
+  if (diasAtraso === 0) return { diasAtraso, multaCents: 0, jurosCents: 0, totalCents: valorCents };
+  const multaCents = Math.round((valorCents * multaPercentual) / 100);
+  const jurosCents = Math.round((valorCents * (moraTaxaMensal / 100) * diasAtraso) / 30);
+  return { diasAtraso, multaCents, jurosCents, totalCents: valorCents + multaCents + jurosCents };
+}
+
 @Injectable()
 export class BoletosService {
   private readonly logger = new Logger(BoletosService.name);
@@ -107,5 +135,71 @@ export class BoletosService {
       this.logger.warn(`Não foi possível completar linha digitável da cobrança ${charge.id}: ${error.message}`);
       return charge;
     }
+  }
+
+  /**
+   * Segunda via atualizada: se o boleto atual já venceu, gera um boleto novo
+   * no Inter com o valor atualizado (multa + juros até hoje) e vencimento
+   * hoje, e cancela o antigo (pra não ser pago em dobro). O PDF do boleto
+   * vencido mostra o valor original - por isso o cliente que pede o boleto
+   * recebe sempre um atualizado. Se o boleto ainda não venceu, devolve o atual.
+   *
+   * Em caso de falha ao gerar o novo, devolve a cobrança como estava (o
+   * boleto antigo continua válido) e `atualizado = false`.
+   */
+  async gerarSegundaViaAtualizada(charge: Charge, client: Client) {
+    const hoje = hojeSaoPaulo();
+    const cfg = this.config.get('inter');
+    const valor = calcularValorAtualizado(
+      charge.amountCents,
+      charge.dueDate.toISOString().slice(0, 10),
+      hoje,
+      cfg?.multaPercentual ?? 0,
+      cfg?.moraTaxaMensal ?? 0,
+    );
+
+    const vencimentoBoletoAtual = (charge.boletoDataVencimento ?? charge.dueDate).toISOString().slice(0, 10);
+    if (vencimentoBoletoAtual >= hoje || !charge.boletoCodigoSolicitacao || !this.inter.isConfigured()) {
+      return { charge, valor, atualizado: false };
+    }
+
+    const novoVencimento = new Date(`${hoje}T00:00:00.000Z`);
+    let novo;
+    try {
+      novo = await this.inter.createBoleto({ ...charge, amountCents: valor.totalCents, dueDate: novoVencimento }, client);
+    } catch (error: any) {
+      const message = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+      this.logger.error(`Falha ao gerar segunda via da cobrança ${charge.id}: ${message}`);
+      return { charge, valor, atualizado: false };
+    }
+
+    try {
+      await this.inter.cancelarBoleto(charge.boletoCodigoSolicitacao, 'Substituído por segunda via atualizada');
+    } catch (error: any) {
+      const message = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+      // O novo já foi gerado: segue com ele, mas o antigo ainda pode ser pago - precisa de baixa manual.
+      this.logger.error(
+        `ATENÇÃO: boleto antigo ${charge.boletoCodigoSolicitacao} (cobrança ${charge.id}) não foi cancelado ` +
+          `no Inter e continua pagável - cancele manualmente. Erro: ${message}`,
+      );
+    }
+
+    const atualizada = await this.prisma.charge.update({
+      where: { id: charge.id },
+      data: {
+        boletoCodigoSolicitacao: novo.codigoSolicitacao,
+        boletoPdfBase64: novo.pdfBase64,
+        pixCopiaECola: novo.pixCopiaECola ?? null,
+        linhaDigitavel: novo.linhaDigitavel ?? null,
+        externalRef: novo.codigoSolicitacao,
+        boletoDataVencimento: novoVencimento,
+        boletoErro: null,
+      },
+    });
+    this.logger.log(
+      `Segunda via gerada para cobrança ${charge.id}: R$ ${(valor.totalCents / 100).toFixed(2)} ` +
+        `(${valor.diasAtraso} dia(s) de atraso).`,
+    );
+    return { charge: atualizada, valor, atualizado: true };
   }
 }

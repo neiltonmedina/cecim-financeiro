@@ -5,6 +5,8 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { WhatsAppProvider } from '../notifications/providers/whatsapp.provider';
 import { EmailSmtpProvider } from '../notifications/providers/email-smtp.provider';
 import { ClaudeAgentService } from './claude-agent.service';
+import { BoletosService } from '../boletos/boletos.service';
+import { formatCurrencyBRL } from '../notifications/utils/template-renderer.util';
 
 function normalizePhone(raw: string): string {
   const digits = raw.replace(/[^\d]/g, '');
@@ -34,6 +36,7 @@ export class ConversationsService {
     private readonly email: EmailSmtpProvider,
     private readonly agent: ClaudeAgentService,
     private readonly config: ConfigService,
+    private readonly boletos: BoletosService,
   ) {}
 
   /** Cria (se ainda não existir) a conversa de cobrança para uma cobrança recém-disparada por WhatsApp. */
@@ -166,15 +169,35 @@ export class ConversationsService {
       return;
     }
     if (charge && (opcao === '2' || /boleto/i.test(text.trim()))) {
-      const mensagens = !charge.paymentLink
-        ? ['Ainda não temos o boleto disponível para essa cobrança - já vou encaminhar para um atendente confirmar.']
-        : charge.linhaDigitavel
+      let mensagens: string[];
+      if (!charge.paymentLink) {
+        mensagens = ['Ainda não temos o boleto disponível para essa cobrança - já vou encaminhar para um atendente confirmar.'];
+      } else {
+        // Boleto vencido: gera a segunda via com o valor atualizado (o PDF do
+        // boleto vencido mostra o valor original).
+        const { charge: c, valor, atualizado } = await this.boletos.gerarSegundaViaAtualizada(charge, client);
+        const vencido = valor.diasAtraso > 0;
+        let cabecalho: string;
+        if (!vencido) {
+          cabecalho = `Segue o seu boleto, no valor de ${formatCurrencyBRL(c.amountCents)}:\n${c.paymentLink}`;
+        } else if (atualizado) {
+          cabecalho =
+            `Segue o boleto atualizado, com vencimento hoje, no valor de *${formatCurrencyBRL(valor.totalCents)}* ` +
+            `(valor original ${formatCurrencyBRL(c.amountCents)} + multa e juros de ${valor.diasAtraso} dia(s) de atraso):\n` +
+            c.paymentLink;
+        } else {
+          cabecalho =
+            `Segue o boleto:\n${c.paymentLink}\n\nEle está vencido: ao pagar, o banco acrescenta multa e juros, ` +
+            `totalizando hoje *${formatCurrencyBRL(valor.totalCents)}*. Se preferir, responda *1* para receber o Pix, ` +
+            'que já vem com o valor atualizado.';
+        }
+        mensagens = c.linhaDigitavel
           ? [
-              `Segue o boleto atualizado, já com os valores corretos:\n${charge.paymentLink}\n\n` +
-                'A linha digitável vem na próxima mensagem. Toque e segure nela, escolha *Copiar* e cole no app do seu banco.',
-              charge.linhaDigitavel,
+              `${cabecalho}\n\nA linha digitável vem na próxima mensagem. Toque e segure nela, escolha *Copiar* e cole no app do seu banco.`,
+              c.linhaDigitavel,
             ]
-          : [`Segue o boleto atualizado, já com os valores corretos:\n${charge.paymentLink}`];
+          : [cabecalho];
+      }
       await this.enviarEmSequencia(conversation.id, phone, mensagens);
       await this.prisma.conversation.update({
         where: { id: conversation.id },

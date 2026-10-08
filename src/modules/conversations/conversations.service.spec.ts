@@ -6,7 +6,7 @@ function setup() {
     client: { findFirst: jest.fn().mockResolvedValue(null) },
   };
   const whatsapp: any = { send: jest.fn() };
-  const service = new ConversationsService(prisma, whatsapp, {} as any, {} as any, {} as any);
+  const service = new ConversationsService(prisma, whatsapp, {} as any, {} as any, {} as any, {} as any);
   return { service, prisma, whatsapp };
 }
 
@@ -37,6 +37,7 @@ describe('ConversationsService - opções 1 (Pix) e 2 (boleto)', () => {
     pixCopiaECola: '00020101021226980014BR.GOV.BCB.PIX-codigo-pix',
     linhaDigitavel: '07790001161206142039908513267545515860000000500',
     paymentLink: 'https://cecim-financeiro.onrender.com/boletos/charge-1',
+    amountCents: 500,
   };
 
   function setupConversa() {
@@ -51,8 +52,15 @@ describe('ConversationsService - opções 1 (Pix) e 2 (boleto)', () => {
       conversationMessage: { create: jest.fn() },
     };
     const whatsapp: any = { send: jest.fn().mockResolvedValue({}) };
-    const service = new ConversationsService(prisma, whatsapp, {} as any, {} as any, {} as any);
-    return { service, whatsapp };
+    const boletos: any = {
+      gerarSegundaViaAtualizada: jest.fn().mockResolvedValue({
+        charge,
+        valor: { diasAtraso: 0, multaCents: 0, jurosCents: 0, totalCents: 500 },
+        atualizado: false,
+      }),
+    };
+    const service = new ConversationsService(prisma, whatsapp, {} as any, {} as any, {} as any, boletos);
+    return { service, whatsapp, boletos };
   }
 
   it('opção 1: manda o Pix sozinho numa mensagem separada (fácil de copiar)', async () => {
@@ -70,5 +78,37 @@ describe('ConversationsService - opções 1 (Pix) e 2 (boleto)', () => {
     expect(whatsapp.send).toHaveBeenCalledTimes(2);
     expect(whatsapp.send.mock.calls[0][0].body).toContain(charge.paymentLink);
     expect(whatsapp.send.mock.calls[1][0].body).toBe(charge.linhaDigitavel);
+  });
+});
+
+describe('ConversationsService - opção 2 com boleto vencido', () => {
+  it('manda a segunda via com o valor atualizado (multa + juros)', async () => {
+    const original = { id: 'charge-1', paymentLink: 'https://x/boletos/charge-1', linhaDigitavel: 'LINHA-ANTIGA', amountCents: 500 };
+    const novo = { ...original, linhaDigitavel: 'LINHA-NOVA' };
+    const prisma: any = {
+      processedWhatsAppMessage: { create: jest.fn().mockResolvedValue({}) },
+      client: { findFirst: jest.fn().mockResolvedValue({ id: 'cli-1', name: 'Cliente' }) },
+      conversation: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'conv-1', chargeId: 'charge-1', messages: [] }),
+        update: jest.fn(),
+      },
+      charge: { findUnique: jest.fn().mockResolvedValue(original) },
+      conversationMessage: { create: jest.fn() },
+    };
+    const whatsapp: any = { send: jest.fn().mockResolvedValue({}) };
+    const boletos: any = {
+      gerarSegundaViaAtualizada: jest.fn().mockResolvedValue({
+        charge: novo,
+        valor: { diasAtraso: 30, multaCents: 10, jurosCents: 5, totalCents: 515 },
+        atualizado: true,
+      }),
+    };
+    const service = new ConversationsService(prisma, whatsapp, {} as any, {} as any, {} as any, boletos);
+
+    await service.handleInboundWhatsApp('5599991646386', '2', 'wamid.3');
+
+    expect(whatsapp.send.mock.calls[0][0].body).toContain('R$');
+    expect(whatsapp.send.mock.calls[0][0].body).toContain('5,15');
+    expect(whatsapp.send.mock.calls[1][0].body).toBe('LINHA-NOVA');
   });
 });

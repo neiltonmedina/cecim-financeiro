@@ -190,6 +190,16 @@ export class InterBoletoProvider {
     };
   }
 
+  /** Cancela (baixa) uma cobrança no Inter - usado ao substituir um boleto vencido pela segunda via atualizada. */
+  async cancelarBoleto(codigoSolicitacao: string, motivo: string): Promise<void> {
+    const token = await this.getAccessToken();
+    await this.getClient().post(
+      `/cobranca/v3/cobrancas/${codigoSolicitacao}/cancelar`,
+      { motivoCancelamento: motivo },
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+  }
+
   /** Consulta o retorno completo (bruto) do Inter para uma cobrança - útil pra investigar/depurar. */
   async consultarBruto(codigoSolicitacao: string): Promise<unknown> {
     const token = await this.getAccessToken();
