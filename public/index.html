@@ -231,7 +231,12 @@
         <div id="import-preview"></div>
       </div>
       <div class="card">
-        <h3 style="margin-top:0;">Novo cliente</h3>
+        <h3 id="client-form-title" style="margin-top:0;">Novo cliente</h3>
+        <div style="margin-bottom:12px; padding:10px 12px; background:#eef2ff; border-radius:8px; font-size:13px;">
+          <strong>Preencher a partir do boleto:</strong> envie o PDF (ou foto) do boleto do cliente e os dados são preenchidos abaixo. Confira e complete o telefone antes de cadastrar.
+          <div style="margin-top:6px;"><input type="file" id="boleto-file" accept="application/pdf,image/png,image/jpeg,image/webp" onchange="lerBoleto(event)" /></div>
+          <div id="boleto-msg" style="margin-top:6px;"></div>
+        </div>
         <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px;">
           <input id="client-name" placeholder="Nome completo" />
           <input id="client-document" placeholder="CPF/CNPJ (só números)" />
@@ -247,7 +252,8 @@
         <div style="margin-top:10px; font-size:12px; color:var(--muted);">
           CEP e endereço completo são obrigatórios apenas se você for gerar boleto (Inter) para esse cliente.
         </div>
-        <button style="margin-top:12px;" onclick="createClient()">Cadastrar cliente</button>
+        <button id="client-submit" style="margin-top:12px;" onclick="createClient()">Cadastrar cliente</button>
+        <button id="client-cancel-edit" class="secondary" style="margin-top:12px; display:none;" onclick="cancelarEdicaoCliente()">Cancelar edição</button>
         <div id="client-form-msg" style="margin-top:8px; font-size:13px;"></div>
       </div>
       <div class="card">
@@ -503,20 +509,84 @@ async function loadClients() {
       el.innerHTML = '<div class="empty">Nenhum cliente cadastrado ainda.</div>';
       return;
     }
-    let html = '<table><thead><tr><th>Nome</th><th>Documento</th><th>Telefone</th><th>Cidade/UF</th></tr></thead><tbody>';
+    clientsCache = {};
+    let html = '<table><thead><tr><th>Nome</th><th>Documento</th><th>Telefone</th><th>Cidade/UF</th><th></th></tr></thead><tbody>';
     for (const c of clients) {
+      clientsCache[c.id] = c;
       const cidadeUf = [c.cidade, c.uf].filter(Boolean).join('/') || '-';
       html += `<tr>
         <td>${c.name}</td>
         <td>${c.document ?? '-'}</td>
         <td>${c.phoneE164 ?? '-'}</td>
         <td>${cidadeUf}</td>
+        <td><button class="secondary" onclick="editarCliente('${c.id}')">Editar</button></td>
       </tr>`;
     }
     html += '</tbody></table>';
     el.innerHTML = html;
   } catch (e) {
     el.innerHTML = '<div class="empty">' + e.message + '</div>';
+  }
+}
+
+let clientsCache = {};
+let editingClientId = null;
+const CLIENT_FIELDS = { name: 'name', document: 'document', phone: 'phoneE164', email: 'email', cep: 'cep', endereco: 'endereco', numero: 'numero', bairro: 'bairro', cidade: 'cidade', uf: 'uf' };
+
+function editarCliente(id) {
+  const c = clientsCache[id];
+  if (!c) return;
+  editingClientId = id;
+  Object.entries(CLIENT_FIELDS).forEach(([f, k]) => (document.getElementById('client-' + f).value = c[k] ?? ''));
+  document.getElementById('client-form-title').textContent = 'Editar cliente';
+  document.getElementById('client-submit').textContent = 'Salvar alterações';
+  document.getElementById('client-cancel-edit').style.display = '';
+  document.getElementById('client-form-msg').textContent = '';
+  document.getElementById('client-form-title').scrollIntoView({ behavior: 'smooth' });
+}
+
+function cancelarEdicaoCliente() {
+  editingClientId = null;
+  Object.keys(CLIENT_FIELDS).forEach((f) => (document.getElementById('client-' + f).value = ''));
+  document.getElementById('client-form-title').textContent = 'Novo cliente';
+  document.getElementById('client-submit').textContent = 'Cadastrar cliente';
+  document.getElementById('client-cancel-edit').style.display = 'none';
+}
+
+async function lerBoleto(event) {
+  const file = event.target.files[0];
+  const msgEl = document.getElementById('boleto-msg');
+  if (!file) return;
+  msgEl.style.color = '';
+  msgEl.textContent = 'Lendo o boleto... (pode levar alguns segundos)';
+  const form = new FormData();
+  form.append('arquivo', file);
+  try {
+    const res = await fetch(API + '/clients/ler-boleto', {
+      method: 'POST',
+      headers: token ? { Authorization: 'Bearer ' + token } : {},
+      body: form,
+    });
+    if (res.status === 401) { logout(); return; }
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.message || 'Erro ' + res.status);
+    const set = (f, v) => { if (v) document.getElementById('client-' + f).value = v; };
+    set('name', d.nome); set('document', (d.documento || '').replace(/\D/g, ''));
+    set('cep', (d.cep || '').replace(/\D/g, '')); set('endereco', d.endereco); set('numero', d.numero);
+    set('bairro', d.bairro); set('cidade', d.cidade); set('uf', (d.uf || '').toUpperCase());
+    let info = 'Dados preenchidos - confira e informe o telefone.';
+    if (d.valor || d.vencimento) {
+      const venc = d.vencimento ? d.vencimento.split('-').reverse().join('/') : '-';
+      info += ` Boleto: valor R$ ${(d.valor || '-').replace('.', ',')}, vencimento ${venc} (use na aba Cobranças).`;
+      if (d.valor) document.getElementById('test-charge-amount').value = d.valor.replace('.', ',');
+    }
+    msgEl.style.color = 'var(--green)';
+    msgEl.textContent = info;
+  } catch (e) {
+    msgEl.style.color = 'var(--red)';
+    msgEl.textContent = 'Não foi possível ler o boleto: ' + e.message;
+  } finally {
+    event.target.value = '';
   }
 }
 
@@ -531,6 +601,7 @@ async function createClient() {
     msgEl.style.color = 'var(--red)';
     return;
   }
+  const editando = editingClientId;
   const body = {
     name,
     document: document.getElementById('client-document').value.trim() || undefined,
@@ -545,11 +616,14 @@ async function createClient() {
     whatsappOptIn: true,
   };
   try {
-    await api('/clients', { method: 'POST', body: JSON.stringify(body) });
+    if (editando) {
+      await api('/clients/' + editando, { method: 'PATCH', body: JSON.stringify(body) });
+    } else {
+      await api('/clients', { method: 'POST', body: JSON.stringify(body) });
+    }
+    cancelarEdicaoCliente();
     msgEl.style.color = 'var(--green)';
-    msgEl.textContent = 'Cliente cadastrado com sucesso!';
-    ['name', 'document', 'phone', 'email', 'cep', 'endereco', 'numero', 'bairro', 'cidade', 'uf']
-      .forEach((f) => (document.getElementById('client-' + f).value = ''));
+    msgEl.textContent = editando ? 'Cliente atualizado com sucesso!' : 'Cliente cadastrado com sucesso!';
     loadClients();
   } catch (e) {
     msgEl.style.color = 'var(--red)';

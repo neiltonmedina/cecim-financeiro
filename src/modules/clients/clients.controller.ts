@@ -1,7 +1,22 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ClientsService } from './clients.service';
+import { BoletoLeituraService } from './boleto-leitura.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 
@@ -10,7 +25,18 @@ import { UpdateClientDto } from './dto/update-client.dto';
 @UseGuards(JwtAuthGuard)
 @Controller('clients')
 export class ClientsController {
-  constructor(private readonly clientsService: ClientsService) {}
+  constructor(
+    private readonly clientsService: ClientsService,
+    private readonly boletoLeitura: BoletoLeituraService,
+  ) {}
+
+  /** Lê um boleto (PDF ou foto) e devolve os dados do pagador para pré-preencher o cadastro. */
+  @Post('ler-boleto')
+  @UseInterceptors(FileInterceptor('arquivo', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  lerBoleto(@UploadedFile() arquivo?: { buffer: Buffer; mimetype: string }) {
+    if (!arquivo) throw new BadRequestException('Nenhum arquivo enviado.');
+    return this.boletoLeitura.lerBoleto(arquivo.buffer, arquivo.mimetype);
+  }
 
   @Post()
   create(@Body() dto: CreateClientDto) {
