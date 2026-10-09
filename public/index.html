@@ -239,7 +239,7 @@
         </div>
         <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px;">
           <input id="client-name" placeholder="Nome completo" />
-          <input id="client-document" placeholder="CPF/CNPJ (só números)" />
+          <input id="client-document" placeholder="CPF/CNPJ (só números)" onblur="buscarCnpj()" />
           <input id="client-phone" placeholder="Telefone +5599999999999" />
           <input id="client-email" placeholder="E-mail (opcional)" />
           <input id="client-cep" placeholder="CEP" />
@@ -250,8 +250,10 @@
           <input id="client-uf" placeholder="UF" maxlength="2" />
         </div>
         <div style="margin-top:10px; font-size:12px; color:var(--muted);">
+          Digite um CNPJ (14 números) e saia do campo para puxar nome e endereço da empresa automaticamente.
           CEP e endereço completo são obrigatórios apenas se você for gerar boleto (Inter) para esse cliente.
         </div>
+        <div id="cnpj-msg" style="margin-top:6px; font-size:13px;"></div>
         <button id="client-submit" style="margin-top:12px;" onclick="createClient()">Cadastrar cliente</button>
         <button id="client-cancel-edit" class="secondary" style="margin-top:12px; display:none;" onclick="cancelarEdicaoCliente()">Cancelar edição</button>
         <div id="client-form-msg" style="margin-top:8px; font-size:13px;"></div>
@@ -547,10 +549,38 @@ function editarCliente(id) {
 
 function cancelarEdicaoCliente() {
   editingClientId = null;
+  ultimoCnpjConsultado = '';
+  document.getElementById('cnpj-msg').textContent = '';
   Object.keys(CLIENT_FIELDS).forEach((f) => (document.getElementById('client-' + f).value = ''));
   document.getElementById('client-form-title').textContent = 'Novo cliente';
   document.getElementById('client-submit').textContent = 'Cadastrar cliente';
   document.getElementById('client-cancel-edit').style.display = 'none';
+}
+
+let ultimoCnpjConsultado = '';
+async function buscarCnpj() {
+  const cnpj = document.getElementById('client-document').value.replace(/\D/g, '');
+  const msgEl = document.getElementById('cnpj-msg');
+  if (cnpj.length !== 14 || cnpj === ultimoCnpjConsultado) return;
+  ultimoCnpjConsultado = cnpj;
+  msgEl.style.color = '';
+  msgEl.textContent = 'Consultando CNPJ na Receita...';
+  try {
+    const d = await api('/clients/cnpj/' + cnpj);
+    // Só preenche campos vazios - não apaga o que já foi digitado.
+    const set = (f, v) => { const el = document.getElementById('client-' + f); if (v && !el.value.trim()) el.value = v; };
+    set('name', d.nome); set('cep', d.cep); set('endereco', d.endereco); set('numero', d.numero);
+    set('bairro', d.bairro); set('cidade', d.cidade); set('uf', d.uf); set('email', d.email);
+    let info = 'Encontrado: ' + d.nome + (d.nomeFantasia ? ' (' + d.nomeFantasia + ')' : '') + '.';
+    if (d.situacao && d.situacao.toUpperCase() !== 'ATIVA') info += ' ⚠️ Situação na Receita: ' + d.situacao + '.';
+    if (d.telefone) info += ' Telefone na Receita: ' + d.telefone + ' (confira se é WhatsApp antes de usar).';
+    msgEl.style.color = 'var(--green)';
+    msgEl.textContent = info;
+  } catch (e) {
+    ultimoCnpjConsultado = '';
+    msgEl.style.color = 'var(--red)';
+    msgEl.textContent = e.message;
+  }
 }
 
 async function lerBoleto(event) {

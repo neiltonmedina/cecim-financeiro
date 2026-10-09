@@ -17,6 +17,7 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ClientsService } from './clients.service';
 import { BoletoLeituraService } from './boleto-leitura.service';
+import { CnpjConsultaService } from './cnpj-consulta.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
 
@@ -28,7 +29,14 @@ export class ClientsController {
   constructor(
     private readonly clientsService: ClientsService,
     private readonly boletoLeitura: BoletoLeituraService,
+    private readonly cnpjConsulta: CnpjConsultaService,
   ) {}
+
+  /** Dados públicos do CNPJ (razão social, endereço) para pré-preencher o cadastro. */
+  @Get('cnpj/:cnpj')
+  consultarCnpj(@Param('cnpj') cnpj: string) {
+    return this.cnpjConsulta.consultar(cnpj);
+  }
 
   /** Lê um boleto (PDF ou foto) e devolve os dados do pagador para pré-preencher o cadastro. */
   @Post('ler-boleto')
