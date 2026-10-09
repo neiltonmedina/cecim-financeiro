@@ -100,6 +100,12 @@ describe('BoletosService - importar boletos já gerados no Inter', () => {
     expect(prisma.charge.create.mock.calls[0][0].data.clientId).toBe('c1');
   });
 
+  it('usa o telefone digitado no painel para o boleto', async () => {
+    const { service, prisma } = setup([{ id: 'c1', name: 'Empresa', document: '04301559000102', phoneE164: null }]);
+    await service.importarBoletosInter(['cod-1'], { 'cod-1': '+5594981606586' });
+    expect(prisma.client.update).toHaveBeenCalledWith({ where: { id: 'c1' }, data: { phoneE164: '+5594981606586' } });
+  });
+
   it('lista só os boletos em aberto', async () => {
     const { service } = setup();
     const lista = await service.listarBoletosInter('2026-10-01', '2026-10-31');

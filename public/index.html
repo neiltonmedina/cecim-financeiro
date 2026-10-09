@@ -271,7 +271,7 @@
         <h3 style="margin-top:0;">Importar boletos já gerados no Inter</h3>
         <p style="font-size:12px; color:var(--muted); margin-top:-6px;">
           Traz para o painel boletos que já existem no Inter (gerados por outro sistema), <strong>sem gerar boleto novo</strong> e sem enviar nada.
-          Depois de importar, selecione as cobranças na lista abaixo e use "Confirmar e disparar".
+          Busque, digite o WhatsApp do cliente na linha do boleto e clique em "Importar selecionados". Depois, selecione a cobrança na lista abaixo e use "Confirmar e disparar".
         </p>
         <div class="filters">
           <label style="font-size:13px;">Vencimento de</label>
@@ -1009,7 +1009,8 @@ async function buscarBoletosInter() {
         <td>${fmtMoney(b.valorCents)}</td>
         <td>${b.vencimento.split('-').reverse().join('/')}</td>
         <td>${b.situacao === 'ATRASADO' ? 'Atrasado' : 'A receber'}</td>
-        <td>${b.telefone || (telefonesPlanilha[b.documento] ? telefonesPlanilha[b.documento] + ' <span style="color:var(--muted); font-size:12px;">(planilha)</span>' : (b.jaNoPainel ? '<span style="color:var(--muted);">ver cadastro no painel</span>' : '<span style="color:var(--red);">sem telefone</span>'))}</td>
+        <td>${b.jaNoPainel ? '<span style="color:var(--muted);">ver cadastro no painel</span>'
+          : `<input class="inter-tel" data-codigo="${b.codigoSolicitacao}" placeholder="WhatsApp com DDD" style="max-width:170px;" value="${b.telefone || telefonesPlanilha[b.documento] || ''}" oninput="if (this.value) this.closest('tr').querySelector('.inter-sel').checked = true" />`}</td>
       </tr>`;
     }
     html += '</tbody></table>';
@@ -1089,10 +1090,23 @@ async function importarBoletosInter() {
   const msgEl = document.getElementById('inter-msg');
   const codigos = [...document.querySelectorAll('.inter-sel:checked')].map((c) => c.value);
   if (!codigos.length) { msgEl.style.color = 'var(--red)'; msgEl.textContent = 'Selecione ao menos um boleto.'; return; }
+  const telefones = {};
+  const invalidos = [];
+  for (const el of document.querySelectorAll('.inter-tel')) {
+    if (!codigos.includes(el.dataset.codigo) || !el.value.trim()) continue;
+    const tel = telefoneDaPlanilha(el.value);
+    if (tel) telefones[el.dataset.codigo] = tel;
+    else invalidos.push(el.value.trim());
+  }
+  if (invalidos.length) {
+    msgEl.style.color = 'var(--red)';
+    msgEl.textContent = 'Telefone inválido (use DDD + número, ex: 94992453959): ' + invalidos.join(', ');
+    return;
+  }
   msgEl.style.color = '';
   msgEl.textContent = 'Importando ' + codigos.length + ' boleto(s)...';
   try {
-    const r = await api('/boletos/inter/importar', { method: 'POST', body: JSON.stringify({ codigos }) });
+    const r = await api('/boletos/inter/importar', { method: 'POST', body: JSON.stringify({ codigos, telefones }) });
     let txt = r.importadas + ' cobrança(s) importada(s), ' + r.clientesCriados + ' cliente(s) novo(s). Nada foi enviado ainda - selecione na lista abaixo e use "Confirmar e disparar".';
     if (r.semTelefone.length) txt += ' ⚠️ Sem telefone (cadastre na aba Clientes antes de disparar): ' + r.semTelefone.join(', ') + '.';
     if (r.erros.length) txt += ' Erros: ' + r.erros.join(' | ');

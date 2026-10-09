@@ -192,7 +192,7 @@ export class BoletosService {
    * mesmo codigoSolicitacao - assim a baixa por webhook, a régua e a segunda
    * via funcionam igual às cobranças geradas aqui. Nada é enviado ao cliente.
    */
-  async importarBoletosInter(codigos: string[]) {
+  async importarBoletosInter(codigos: string[], telefones: Record<string, string> = {}) {
     if (!this.inter.isConfigured()) throw new BadRequestException('Integração com o Inter não configurada.');
     const appUrl = this.config.get<string>('appUrl');
     const hoje = hojeSaoPaulo();
@@ -207,6 +207,9 @@ export class BoletosService {
       }
       try {
         const b = lerCobrancaInter(await this.inter.consultarBruto(codigo));
+        // Telefone digitado no painel para esse boleto tem prioridade sobre o do Inter.
+        const telefoneInformado = /^\+55\d{10,11}$/.test(telefones[codigo] ?? '') ? telefones[codigo] : '';
+        if (telefoneInformado) b.telefone = telefoneInformado;
         if (!SITUACOES_EM_ABERTO.includes(b.situacao)) {
           resultado.erros.push(`${b.nome || codigo}: boleto não está em aberto no Inter (${b.situacao}).`);
           continue;
@@ -230,7 +233,7 @@ export class BoletosService {
           });
           if (b.documento) porDocumento.set(b.documento, cliente);
           resultado.clientesCriados++;
-        } else if (!cliente.phoneE164 && b.telefone) {
+        } else if (b.telefone && (telefoneInformado ? cliente.phoneE164 !== b.telefone : !cliente.phoneE164)) {
           cliente = await this.prisma.client.update({ where: { id: cliente.id }, data: { phoneE164: b.telefone } });
         }
         if (!cliente.phoneE164 && !resultado.semTelefone.includes(cliente.name)) resultado.semTelefone.push(cliente.name);

@@ -53,10 +53,11 @@ export class BoletosController {
   @Post('inter/importar')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  importarInter(@Body() body: { codigos?: string[] }) {
+  importarInter(@Body() body: { codigos?: string[]; telefones?: Record<string, string> }) {
     const codigos = Array.isArray(body?.codigos) ? body.codigos.filter((c) => typeof c === 'string' && c) : [];
     if (!codigos.length) throw new BadRequestException('Selecione ao menos um boleto.');
-    return this.boletosService.importarBoletosInter(codigos);
+    const telefones = body?.telefones && typeof body.telefones === 'object' ? body.telefones : {};
+    return this.boletosService.importarBoletosInter(codigos, telefones);
   }
 
   /** Consulta bruta no Inter por código de solicitação - pra investigar webhooks/pagamentos não reconhecidos. */
