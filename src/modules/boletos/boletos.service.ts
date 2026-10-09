@@ -1,10 +1,35 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Charge, Client } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { InterBoletoProvider } from './inter-boleto.provider';
 
 const DIA_MS = 24 * 60 * 60 * 1000;
+
+/** Situações do Inter que ainda podem ser cobradas. */
+const SITUACOES_EM_ABERTO = ['A_RECEBER', 'ATRASADO'];
+
+const soDigitos = (v: unknown) => String(v ?? '').replace(/\D/g, '');
+
+/** Normaliza um item da listagem/consulta do Inter ({ cobranca, boleto, pix }). */
+function lerCobrancaInter(item: any) {
+  const c = item?.cobranca ?? item ?? {};
+  const pagador = c.pagador ?? {};
+  const fone = soDigitos(`${pagador.ddd ?? ''}${pagador.telefone ?? ''}`);
+  return {
+    codigoSolicitacao: c.codigoSolicitacao as string,
+    seuNumero: c.seuNumero ?? '',
+    situacao: c.situacao ?? '',
+    valorCents: Math.round(Number(c.valorNominal ?? 0) * 100),
+    vencimento: String(c.dataVencimento ?? '').slice(0, 10),
+    nome: pagador.nome ?? '',
+    documento: soDigitos(pagador.cpfCnpj),
+    telefone: fone.length === 10 || fone.length === 11 ? `+55${fone}` : '',
+    pagador,
+    linhaDigitavel: item?.boleto?.linhaDigitavel ?? null,
+    pixCopiaECola: item?.pix?.pixCopiaECola ?? null,
+  };
+}
 
 /** Data de hoje (YYYY-MM-DD) no fuso de São Paulo. */
 export function hojeSaoPaulo(agora = new Date()): string {
@@ -135,6 +160,115 @@ export class BoletosService {
       this.logger.warn(`Não foi possível completar linha digitável da cobrança ${charge.id}: ${error.message}`);
       return charge;
     }
+  }
+
+  /**
+   * Lista os boletos em aberto no Inter (A_RECEBER/ATRASADO) com vencimento no
+   * período, indicando quais já estão no painel - para importar boletos que
+   * foram gerados fora daqui sem gerar boleto novo.
+   */
+  async listarBoletosInter(dataInicial: string, dataFinal: string, cpfCnpj?: string) {
+    if (!this.inter.isConfigured()) throw new BadRequestException('Integração com o Inter não configurada.');
+    let itens: any[];
+    try {
+      itens = await this.inter.listarCobrancas({ dataInicial, dataFinal, cpfCnpj: soDigitos(cpfCnpj) || undefined });
+    } catch (error: any) {
+      const message = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+      this.logger.error(`Falha ao listar cobranças no Inter: ${message}`);
+      throw new BadRequestException(`O Inter recusou a consulta: ${message}`);
+    }
+    const boletos = itens.map(lerCobrancaInter).filter((b) => b.codigoSolicitacao && SITUACOES_EM_ABERTO.includes(b.situacao));
+    const existentes = await this.prisma.charge.findMany({
+      where: { boletoCodigoSolicitacao: { in: boletos.map((b) => b.codigoSolicitacao) } },
+      select: { boletoCodigoSolicitacao: true },
+    });
+    const noPainel = new Set(existentes.map((c) => c.boletoCodigoSolicitacao));
+    return boletos.map(({ pagador, pixCopiaECola, ...b }) => ({ ...b, jaNoPainel: noPainel.has(b.codigoSolicitacao) }));
+  }
+
+  /**
+   * Traz para o painel boletos que já existem no Inter, SEM gerar boleto novo:
+   * cria (ou reaproveita, pelo CPF/CNPJ) o cliente e cria a cobrança ligada ao
+   * mesmo codigoSolicitacao - assim a baixa por webhook, a régua e a segunda
+   * via funcionam igual às cobranças geradas aqui. Nada é enviado ao cliente.
+   */
+  async importarBoletosInter(codigos: string[]) {
+    if (!this.inter.isConfigured()) throw new BadRequestException('Integração com o Inter não configurada.');
+    const appUrl = this.config.get<string>('appUrl');
+    const hoje = hojeSaoPaulo();
+    const clientes = await this.prisma.client.findMany({ where: { document: { not: null } } });
+    const porDocumento = new Map(clientes.map((c) => [soDigitos(c.document), c]));
+
+    const resultado = { importadas: 0, jaExistiam: 0, clientesCriados: 0, semTelefone: [] as string[], erros: [] as string[] };
+    for (const codigo of codigos) {
+      if (await this.prisma.charge.findFirst({ where: { boletoCodigoSolicitacao: codigo } })) {
+        resultado.jaExistiam++;
+        continue;
+      }
+      try {
+        const b = lerCobrancaInter(await this.inter.consultarBruto(codigo));
+        if (!SITUACOES_EM_ABERTO.includes(b.situacao)) {
+          resultado.erros.push(`${b.nome || codigo}: boleto não está em aberto no Inter (${b.situacao}).`);
+          continue;
+        }
+
+        let cliente = b.documento ? porDocumento.get(b.documento) : undefined;
+        if (!cliente) {
+          cliente = await this.prisma.client.create({
+            data: {
+              name: b.nome || 'Cliente sem nome',
+              document: b.documento || null,
+              email: b.pagador.email || null,
+              phoneE164: b.telefone || null,
+              cep: soDigitos(b.pagador.cep) || null,
+              endereco: b.pagador.endereco || null,
+              numero: b.pagador.numero || null,
+              bairro: b.pagador.bairro || null,
+              cidade: b.pagador.cidade || null,
+              uf: b.pagador.uf || null,
+            },
+          });
+          if (b.documento) porDocumento.set(b.documento, cliente);
+          resultado.clientesCriados++;
+        } else if (!cliente.phoneE164 && b.telefone) {
+          cliente = await this.prisma.client.update({ where: { id: cliente.id }, data: { phoneE164: b.telefone } });
+        }
+        if (!cliente.phoneE164 && !resultado.semTelefone.includes(cliente.name)) resultado.semTelefone.push(cliente.name);
+
+        let pdf: string | undefined;
+        try {
+          pdf = await this.inter.baixarPdf(codigo);
+        } catch (error: any) {
+          this.logger.warn(`Boleto ${codigo} importado sem PDF: ${error.message}`);
+        }
+
+        const vencimento = new Date(`${b.vencimento}T00:00:00.000Z`);
+        const charge = await this.prisma.charge.create({
+          data: {
+            clientId: cliente.id,
+            description: `Mensalidade ${b.vencimento.slice(5, 7)}/${b.vencimento.slice(0, 4)}`,
+            amountCents: b.valorCents,
+            dueDate: vencimento,
+            status: b.vencimento < hoje ? 'VENCIDA' : 'PENDENTE',
+            externalRef: codigo,
+            boletoCodigoSolicitacao: codigo,
+            boletoDataVencimento: vencimento,
+            boletoPdfBase64: pdf ?? null,
+            linhaDigitavel: b.linhaDigitavel,
+            pixCopiaECola: b.pixCopiaECola,
+          },
+        });
+        if (pdf) {
+          await this.prisma.charge.update({ where: { id: charge.id }, data: { paymentLink: `${appUrl}/boletos/${charge.id}` } });
+        }
+        resultado.importadas++;
+      } catch (error: any) {
+        const message = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+        this.logger.error(`Falha ao importar boleto ${codigo} do Inter: ${message}`);
+        resultado.erros.push(`${codigo}: ${message}`);
+      }
+    }
+    return resultado;
   }
 
   /**

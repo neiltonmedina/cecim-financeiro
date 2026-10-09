@@ -1,4 +1,4 @@
-import { Controller, Get, NotFoundException, Param, Post, Res, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, NotFoundException, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -31,6 +31,32 @@ export class BoletosController {
   @UseGuards(JwtAuthGuard)
   consultarWebhook() {
     return this.boletosService.consultarWebhookPagamento();
+  }
+
+  /** Lista os boletos em aberto no Inter no período (vencimento), para importar os que foram gerados fora do painel. */
+  @Get('inter/em-aberto')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  listarInter(
+    @Query('dataInicial') dataInicial: string,
+    @Query('dataFinal') dataFinal: string,
+    @Query('cpfCnpj') cpfCnpj?: string,
+  ) {
+    const iso = /^\d{4}-\d{2}-\d{2}$/;
+    if (!iso.test(dataInicial ?? '') || !iso.test(dataFinal ?? '')) {
+      throw new BadRequestException('Informe dataInicial e dataFinal no formato AAAA-MM-DD.');
+    }
+    return this.boletosService.listarBoletosInter(dataInicial, dataFinal, cpfCnpj);
+  }
+
+  /** Importa para o painel boletos que já existem no Inter (não gera boleto novo, não envia nada). */
+  @Post('inter/importar')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  importarInter(@Body() body: { codigos?: string[] }) {
+    const codigos = Array.isArray(body?.codigos) ? body.codigos.filter((c) => typeof c === 'string' && c) : [];
+    if (!codigos.length) throw new BadRequestException('Selecione ao menos um boleto.');
+    return this.boletosService.importarBoletosInter(codigos);
   }
 
   /** Consulta bruta no Inter por código de solicitação - pra investigar webhooks/pagamentos não reconhecidos. */

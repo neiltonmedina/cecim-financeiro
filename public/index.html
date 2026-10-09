@@ -268,6 +268,24 @@
 
     <div id="tab-charges" class="tab">
       <div class="card">
+        <h3 style="margin-top:0;">Importar boletos já gerados no Inter</h3>
+        <p style="font-size:12px; color:var(--muted); margin-top:-6px;">
+          Traz para o painel boletos que já existem no Inter (gerados por outro sistema), <strong>sem gerar boleto novo</strong> e sem enviar nada.
+          Depois de importar, selecione as cobranças na lista abaixo e use "Confirmar e disparar".
+        </p>
+        <div class="filters">
+          <label style="font-size:13px;">Vencimento de</label>
+          <input id="inter-de" type="date" />
+          <label style="font-size:13px;">até</label>
+          <input id="inter-ate" type="date" />
+          <input id="inter-doc" type="text" placeholder="CPF/CNPJ (opcional)" style="max-width:180px;" />
+          <button onclick="buscarBoletosInter()">Buscar no Inter</button>
+        </div>
+        <div id="inter-msg" style="font-size:13px; margin-top:6px;"></div>
+        <div id="inter-lista"></div>
+      </div>
+
+      <div class="card">
         <h3 style="margin-top:0;">Nova cobrança de teste</h3>
         <p style="font-size:12px; color:var(--muted); margin-top:-6px;">
           O Inter não aceita boleto com vencimento no passado - use hoje ou uma data futura.
@@ -951,7 +969,74 @@ function toggleChargeSelection(id, checked) {
   updateCampaignCount();
 }
 
+function prepararFiltroInter() {
+  const de = document.getElementById('inter-de');
+  if (!de || de.value) return;
+  const h = new Date();
+  const iso = (d) => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  de.value = iso(new Date(h.getFullYear(), h.getMonth(), 1));
+  document.getElementById('inter-ate').value = iso(new Date(h.getFullYear(), h.getMonth() + 1, 0));
+}
+
+async function buscarBoletosInter() {
+  const msgEl = document.getElementById('inter-msg');
+  const listaEl = document.getElementById('inter-lista');
+  const de = document.getElementById('inter-de').value;
+  const ate = document.getElementById('inter-ate').value;
+  const doc = document.getElementById('inter-doc').value.replace(/\D/g, '');
+  listaEl.innerHTML = '';
+  msgEl.style.color = '';
+  if (!de || !ate) { msgEl.textContent = 'Informe o período de vencimento.'; return; }
+  msgEl.textContent = 'Consultando o Inter...';
+  try {
+    const boletos = await api('/boletos/inter/em-aberto?dataInicial=' + de + '&dataFinal=' + ate + (doc ? '&cpfCnpj=' + doc : ''));
+    if (!boletos.length) { msgEl.textContent = 'Nenhum boleto em aberto no Inter nesse período.'; return; }
+    const novos = boletos.filter((b) => !b.jaNoPainel).length;
+    msgEl.textContent = boletos.length + ' boleto(s) em aberto no Inter, ' + novos + ' ainda fora do painel.';
+    let html = '<table><thead><tr><th><input type="checkbox" onclick="document.querySelectorAll(\'.inter-sel:not(:disabled)\').forEach((c) => (c.checked = this.checked))" /></th><th>Pagador</th><th>CPF/CNPJ</th><th>Valor</th><th>Vencimento</th><th>Situação</th><th>Telefone no Inter</th></tr></thead><tbody>';
+    for (const b of boletos) {
+      html += `<tr>
+        <td>${b.jaNoPainel ? '✔️' : `<input type="checkbox" class="inter-sel" value="${b.codigoSolicitacao}" />`}</td>
+        <td>${b.nome}${b.jaNoPainel ? ' <span style="color:var(--muted); font-size:12px;">(já no painel)</span>' : ''}</td>
+        <td>${b.documento || '-'}</td>
+        <td>${fmtMoney(b.valorCents)}</td>
+        <td>${b.vencimento.split('-').reverse().join('/')}</td>
+        <td>${b.situacao === 'ATRASADO' ? 'Atrasado' : 'A receber'}</td>
+        <td>${b.telefone || '<span style="color:var(--red);">sem telefone</span>'}</td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+    if (novos) html += '<button style="margin-top:10px;" onclick="importarBoletosInter()">Importar selecionados</button>';
+    listaEl.innerHTML = html;
+  } catch (e) {
+    msgEl.style.color = 'var(--red)';
+    msgEl.textContent = e.message;
+  }
+}
+
+async function importarBoletosInter() {
+  const msgEl = document.getElementById('inter-msg');
+  const codigos = [...document.querySelectorAll('.inter-sel:checked')].map((c) => c.value);
+  if (!codigos.length) { msgEl.style.color = 'var(--red)'; msgEl.textContent = 'Selecione ao menos um boleto.'; return; }
+  msgEl.style.color = '';
+  msgEl.textContent = 'Importando ' + codigos.length + ' boleto(s)...';
+  try {
+    const r = await api('/boletos/inter/importar', { method: 'POST', body: JSON.stringify({ codigos }) });
+    let txt = r.importadas + ' cobrança(s) importada(s), ' + r.clientesCriados + ' cliente(s) novo(s). Nada foi enviado ainda - selecione na lista abaixo e use "Confirmar e disparar".';
+    if (r.semTelefone.length) txt += ' ⚠️ Sem telefone (cadastre na aba Clientes antes de disparar): ' + r.semTelefone.join(', ') + '.';
+    if (r.erros.length) txt += ' Erros: ' + r.erros.join(' | ');
+    msgEl.style.color = r.erros.length ? 'var(--red)' : 'var(--green)';
+    msgEl.textContent = txt;
+    document.getElementById('inter-lista').innerHTML = '';
+    loadCharges();
+  } catch (e) {
+    msgEl.style.color = 'var(--red)';
+    msgEl.textContent = e.message;
+  }
+}
+
 async function loadCharges() {
+  prepararFiltroInter();
   const el = document.getElementById('charges-content');
   el.innerHTML = '<div class="loading">Carregando...</div>';
   const status = document.getElementById('charge-status-filter').value;

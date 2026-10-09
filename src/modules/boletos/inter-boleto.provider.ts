@@ -200,6 +200,40 @@ export class InterBoletoProvider {
     );
   }
 
+  /**
+   * Lista as cobranças da conta no Inter com vencimento no período (todas as
+   * páginas). Usado para importar boletos que já foram gerados fora do painel.
+   */
+  async listarCobrancas(params: { dataInicial: string; dataFinal: string; cpfCnpj?: string }): Promise<any[]> {
+    const token = await this.getAccessToken();
+    const itens: any[] = [];
+    for (let pagina = 0; pagina < 50; pagina++) {
+      const { data } = await this.getClient().get('/cobranca/v3/cobrancas', {
+        headers: { Authorization: `Bearer ${token}` },
+        params: {
+          dataInicial: params.dataInicial,
+          dataFinal: params.dataFinal,
+          filtrarDataPor: 'VENCIMENTO',
+          ...(params.cpfCnpj ? { cpfCnpjPessoaPagadora: params.cpfCnpj } : {}),
+          'paginacao.itensPorPagina': 1000,
+          'paginacao.paginaAtual': pagina,
+        },
+      });
+      itens.push(...(data?.cobrancas ?? []));
+      if (data?.ultimaPagina !== false || !data?.cobrancas?.length) break;
+    }
+    return itens;
+  }
+
+  /** Baixa o PDF (base64) de uma cobrança já existente no Inter. */
+  async baixarPdf(codigoSolicitacao: string): Promise<string | undefined> {
+    const token = await this.getAccessToken();
+    const { data } = await this.getClient().get(`/cobranca/v3/cobrancas/${codigoSolicitacao}/pdf`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    return data?.pdf;
+  }
+
   /** Consulta o retorno completo (bruto) do Inter para uma cobrança - útil pra investigar/depurar. */
   async consultarBruto(codigoSolicitacao: string): Promise<unknown> {
     const token = await this.getAccessToken();
