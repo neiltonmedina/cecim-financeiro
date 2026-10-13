@@ -64,6 +64,14 @@
   .sidebar nav.tabs button:hover { background: rgba(255,255,255,0.08); color: #fff; }
   .sidebar nav.tabs button.active { background: #fff; color: var(--primary); }
   .sidebar nav.tabs button.active svg { opacity: 1; }
+  .nav-badge { margin-left: auto; background: #d03b3b; color: #fff; border-radius: 999px; font-size: 11px; font-weight: 800; padding: 2px 8px; display: none; }
+  .nav-badge.on { display: inline-block; animation: pulsar 1.6s ease-in-out infinite; }
+  @keyframes pulsar { 0%,100% { box-shadow: 0 0 0 0 rgba(208,59,59,.55); } 50% { box-shadow: 0 0 0 6px rgba(208,59,59,0); } }
+  .sidebar nav.tabs button.alerta:not(.active) { color: #ffd6d6; }
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .chip { background: #eef1f6; color: var(--text); font-weight: 600; font-size: 13px; padding: 7px 12px; border-radius: 999px; }
+  .chip.active { background: var(--primary); color: #fff; }
+  .chip:hover { background: #e2e6ee; } .chip.active:hover { background: var(--primary-dark); }
   #health-bar { display: flex; flex-wrap: wrap; gap: 8px 12px; font-size: 11.5px; color: rgba(255,255,255,0.7); padding: 14px 10px 0; border-top: 1px solid rgba(255,255,255,0.12); }
   .content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   header.topbar {
@@ -276,6 +284,7 @@
       <div class="section">Cobranças</div>
       <button id="tab-btn-charges" onclick="switchTab('charges')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/><rect x="3" y="3" width="18" height="18" rx="3"/></svg><span>Novas cobranças</span></button>
       <button id="tab-btn-inter" onclick="switchTab('inter')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M6 20V9M10 20V9M14 20V9M18 20V9"/><path d="M3 20h18"/></svg><span>Boletos do Inter</span></button>
+      <button id="tab-btn-problemas" onclick="switchTab('problemas')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg><span>Com problema</span><span class="nav-badge" id="badge-problemas">0</span></button>
       <div class="section">Relacionamento</div>
       <button id="tab-btn-clients" onclick="switchTab('clients')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M21.5 20c-.5-2.6-2-4.4-4-5.1"/></svg><span>Clientes</span></button>
       <button id="tab-btn-conversations" onclick="switchTab('conversations')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg><span>Respostas dos clientes</span></button>
@@ -470,6 +479,16 @@
       </div>
     </div>
 
+    <div id="tab-problemas" class="tab" style="display:none;">
+      <div class="card">
+        <div class="card-head"><div><h3>Cobranças que não foram enviadas</h3>
+          <div class="hint">Cobranças em aberto cujo WhatsApp falhou ou que não podem ser enviadas (sem boleto ou sem telefone). Resolva e envie direto daqui.</div></div>
+          <button class="secondary" onclick="loadProblemas()">Atualizar</button></div>
+        <div class="chips" id="problemas-filtros"></div>
+        <div id="problemas-content" class="loading">Carregando...</div>
+      </div>
+    </div>
+
     <div id="tab-conversations" class="tab" style="display:none;">
       <div class="card">
         <div class="filters">
@@ -625,6 +644,8 @@ function showApp() {
   document.getElementById('user-name').textContent = userName;
   switchTab('dashboard');
   loadHealth();
+  atualizarBadgeProblemas();
+  setInterval(atualizarBadgeProblemas, 60000);
 }
 
 async function loadHealth() {
@@ -650,6 +671,7 @@ const PAGINAS = {
   dashboard: ['Dashboard', 'Visão geral da carteira, recebimentos e da régua de cobrança'],
   charges: ['Novas cobranças', 'Crie cobranças com boleto novo no Inter e dispare pelo WhatsApp'],
   inter: ['Boletos do Inter', 'Boletos já gerados no Inter - importe sem duplicar e dispare pelo WhatsApp'],
+  problemas: ['Com problema', 'Cobranças que não foram enviadas - veja o motivo e resolva com um clique'],
   clients: ['Clientes', 'Cadastro, edição e importação de clientes'],
   conversations: ['Respostas dos clientes', 'Conversas do agente de cobrança no WhatsApp'],
   report: ['Relatório', 'Resultado do agente de cobrança no período'],
@@ -663,7 +685,9 @@ function switchTab(name) {
   });
   document.getElementById('page-title').textContent = PAGINAS[name][0];
   document.getElementById('page-sub').textContent = PAGINAS[name][1];
+  abaAtual = name;
   if (name === 'dashboard') loadDashboard();
+  if (name === 'problemas') loadProblemas();
   if (name === 'clients') loadClients();
   if (name === 'charges') loadCharges('PAINEL');
   if (name === 'inter') { prepararFiltroInter(); loadCharges('INTER'); }
@@ -1314,9 +1338,12 @@ async function importarBoletosInter() {
 }
 
 let chargesOrigem = 'PAINEL';
+let abaAtual = 'dashboard';
 
 async function loadCharges(origem = chargesOrigem) {
   chargesOrigem = origem;
+  atualizarBadgeProblemas();
+  if (abaAtual === 'problemas') loadProblemas();
   const el = document.getElementById('charges-content-' + origem);
   el.innerHTML = '<div class="loading">Carregando...</div>';
   const status = document.getElementById('charge-status-filter-' + origem).value;
@@ -1359,7 +1386,7 @@ async function loadCharges(origem = chargesOrigem) {
         <td>${fmtMoney(c.amountCents)}</td>
         <td>${vencimentoCell}</td>
         <td style="white-space:nowrap;"><span class="badge ${c.status}">${c.status}</span>${iconeEnvio(c)}${c.notifications?.[0]?.status === 'FAILED'
-          ? `<div style="font-size:11.5px; color:var(--red); white-space:normal; max-width:220px; margin-top:4px; cursor:pointer;" onclick="mostrarErroEnvio('${c.id}')">${explicarErroEnvio(c.notifications[0].errorMessage).split(':')[0].split('.')[0]}</div>` : ''}</td>
+          ? `<div style="font-size:11.5px; color:var(--red); white-space:normal; max-width:220px; margin-top:4px; cursor:pointer;" onclick="mostrarErroEnvio('${c.id}')">${explicarErroEnvio(c.notifications[0].errorMessage, !semBoleto).split(':')[0].split('.')[0]}</div>` : ''}</td>
       </tr>`;
     }
     html += '</tbody></table>';
@@ -1396,7 +1423,7 @@ let boletoPendente = null; // { chargeId, intervalDays, voltarPara } enquanto o 
  * os dados que o Inter exige; ao salvar, gera o boleto e envia a cobrança.
  */
 async function abrirCadastroParaGerarBoleto(chargeId, clientId, intervalDays = 5) {
-  const voltarPara = document.getElementById('tab-inter').style.display === 'none' ? 'charges' : 'inter';
+  const voltarPara = abaAtual === 'clients' ? 'charges' : abaAtual;
   closeModal();
   switchTab('clients');
   await editarCliente(clientId);
@@ -1476,6 +1503,76 @@ function botoesSolucao({ chargeId, clientId, telefone, nome, temBoleto, erro, in
 }
 
 let ultimosEnvios = {};
+let problemasDados = [];
+let problemasFiltro = '';
+const TIPOS_PROBLEMA = {
+  FALHA_ENVIO: { label: 'Falha no envio', cor: 'var(--red)' },
+  SEM_BOLETO: { label: 'Sem boleto', cor: '#b4471b' },
+  SEM_TELEFONE: { label: 'Sem telefone', cor: '#8a5a12' },
+};
+
+/** Contador vermelho no menu - pisca enquanto houver cobrança com problema. */
+async function atualizarBadgeProblemas() {
+  try {
+    problemasDados = await api('/charges/problemas');
+  } catch (e) { return; }
+  const badge = document.getElementById('badge-problemas');
+  badge.textContent = problemasDados.length;
+  badge.classList.toggle('on', problemasDados.length > 0);
+  document.getElementById('tab-btn-problemas').classList.toggle('alerta', problemasDados.length > 0);
+}
+
+async function loadProblemas() {
+  const el = document.getElementById('problemas-content');
+  el.innerHTML = '<div class="loading">Carregando...</div>';
+  await atualizarBadgeProblemas();
+  renderProblemas();
+}
+
+function filtrarProblemas(tipo) { problemasFiltro = tipo; renderProblemas(); }
+
+function renderProblemas() {
+  const el = document.getElementById('problemas-content');
+  const contar = (t) => problemasDados.filter((c) => c.problema === t).length;
+  document.getElementById('problemas-filtros').innerHTML =
+    `<button class="chip ${problemasFiltro === '' ? 'active' : ''}" onclick="filtrarProblemas('')">Todos (${problemasDados.length})</button>` +
+    Object.entries(TIPOS_PROBLEMA).map(([t, i]) => `<button class="chip ${problemasFiltro === t ? 'active' : ''}" onclick="filtrarProblemas('${t}')">${i.label} (${contar(t)})</button>`).join('');
+  const lista = problemasDados.filter((c) => !problemasFiltro || c.problema === problemasFiltro);
+  if (!lista.length) {
+    el.innerHTML = '<div class="empty">✓ Nenhuma cobrança com problema. Tudo foi enviado.</div>';
+    return;
+  }
+  for (const c of lista) {
+    ultimosEnvios[c.id] = { cliente: c.client?.name, envio: c.notifications?.[0], clientId: c.clientId, telefone: c.client?.phoneE164, temBoleto: !!(c.linhaDigitavel || c.pixCopiaECola) };
+  }
+  let html = '<table><thead><tr><th>Cliente</th><th>Origem</th><th>Valor</th><th>Vencimento</th><th>Problema</th><th>Resolver</th></tr></thead><tbody>';
+  for (const c of lista) {
+    const tipo = TIPOS_PROBLEMA[c.problema];
+    const n = c.notifications?.[0];
+    const nome = (c.client?.name ?? '').replaceAll("'", '');
+    let motivo, acoes;
+    if (c.problema === 'FALHA_ENVIO') {
+      motivo = explicarErroEnvio(n?.errorMessage, !!(c.linhaDigitavel || c.pixCopiaECola));
+      acoes = botoesSolucao({ chargeId: c.id, clientId: c.clientId, telefone: c.client?.phoneE164, nome, temBoleto: !!(c.linhaDigitavel || c.pixCopiaECola), erro: n?.errorMessage }) +
+        `<button class="secondary" onclick="mostrarErroEnvio('${c.id}')">Detalhes</button>`;
+    } else if (c.problema === 'SEM_BOLETO') {
+      motivo = 'O boleto não foi gerado no Inter' + (c.boletoErro ? ': ' + c.boletoErro : '.');
+      acoes = `<button onclick="abrirCadastroParaGerarBoleto('${c.id}', '${c.clientId}')">🧾 Conferir cadastro e gerar boleto</button>`;
+    } else {
+      motivo = 'O cliente não tem WhatsApp cadastrado.';
+      acoes = `<button onclick="editarTelefone('${c.clientId}', '', '${nome}', '${c.id}')">📞 Cadastrar telefone e enviar</button>`;
+    }
+    html += `<tr>
+      <td><strong style="font-weight:600;">${c.client?.name ?? '-'}</strong><div style="font-size:12px; color:var(--muted);">${c.client?.phoneE164 ?? 'sem telefone'}</div></td>
+      <td><span class="pill ${c.origem === 'INTER' ? 'inter' : 'painel'}">${c.origem === 'INTER' ? 'Inter' : 'Painel'}</span></td>
+      <td style="white-space:nowrap;">${fmtMoney(c.amountCents)}</td>
+      <td>${fmtDate(c.dueDate)}</td>
+      <td style="max-width:320px;"><span style="font-weight:700; color:${tipo.cor};">⚠ ${tipo.label}</span><div style="font-size:12.5px; color:var(--muted); margin-top:2px;">${motivo}</div></td>
+      <td><div style="display:flex; gap:6px; flex-wrap:wrap;">${acoes}</div></td>
+    </tr>`;
+  }
+  el.innerHTML = html + '</tbody></table>';
+}
 
 /**
  * Traduz o erro técnico do WhatsApp/Meta para o que aconteceu e o que fazer.
@@ -1504,9 +1601,12 @@ const ERROS_WHATSAPP = {
   133010: 'O número de envio da empresa não está registrado no WhatsApp.',
   190: 'O token de acesso do WhatsApp expirou ou é inválido. É preciso gerar um novo no painel da Meta.',
 };
-function explicarErroEnvio(msg) {
+function explicarErroEnvio(msg, temBoleto = false) {
   const texto = String(msg || '');
   const codigo = (texto.match(/#(\d{2,6})/) || [])[1];
+  if (temBoleto && (codigo === '131008' || /sem boleto/i.test(texto))) {
+    return 'Na hora do envio a cobrança estava sem boleto. Agora ela já tem boleto: clique em "Disparar de novo".';
+  }
   if (codigo && ERROS_WHATSAPP[codigo]) return ERROS_WHATSAPP[codigo];
   if (/sem boleto/i.test(texto)) return 'Cobrança sem boleto (linha digitável/Pix vazios). Clique em "Conferir cadastro e gerar boleto".';
   if (/template ativo não encontrado/i.test(texto)) return 'Modelo de mensagem não cadastrado/ativo no painel (aba Modelos de mensagem).';
@@ -1534,7 +1634,7 @@ function mostrarErroEnvio(chargeId) {
       <h3 style="margin-bottom:4px;">⚠️ Cobrança não enviada</h3>
       <p style="color:var(--muted); font-size:13px; margin-top:0;">${cliente}</p>
       <div style="padding:12px 14px; border-radius:10px; background:var(--red-soft); color:var(--red); font-size:14px;">
-        <strong>O que aconteceu:</strong> ${explicarErroEnvio(n.errorMessage)}
+        <strong>O que aconteceu:</strong> ${explicarErroEnvio(n.errorMessage, temBoleto)}
       </div>
       <div style="font-size:12.5px; color:var(--muted); margin-top:10px; line-height:1.6;">
         Número usado: ${n.destination} · tentativa ${n.attempt} · ${fmtDateTime(n.failedAt || n.queuedAt)}<br>
@@ -1633,7 +1733,7 @@ async function openConversation(id) {
       const SITUACAO = {
         QUEUED: ['⏳', 'Na fila de envio desde ' + (ultimo ? fmtDateTime(ultimo.queuedAt) : '') + '. Se passar de 10 minutos, o sistema reenvia sozinho.', 'var(--yellow)'],
         SENDING: ['⏳', 'Enviando agora...', 'var(--yellow)'],
-        FAILED: ['⚠️', 'Não enviada. ' + explicarErroEnvio(ultimo?.errorMessage) +
+        FAILED: ['⚠️', 'Não enviada. ' + explicarErroEnvio(ultimo?.errorMessage, !!(conv.charge?.linhaDigitavel || conv.charge?.pixCopiaECola)) +
           '<div style="color:var(--muted); font-size:12px; margin-top:4px;">Detalhe técnico: ' + (ultimo?.errorMessage || 'não informado') + '</div>' +
           '<div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">' + botoesSolucao({
             chargeId: conv.chargeId, clientId: conv.clientId, telefone: conv.client?.phoneE164, nome: conv.client?.name,

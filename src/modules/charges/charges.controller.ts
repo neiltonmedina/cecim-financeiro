@@ -40,6 +40,12 @@ export class ChargesController {
     return this.chargesService.findAll({ status, clientId, origem });
   }
 
+  /** Cobranças em aberto com problema de envio (aba "Com problema" do painel). */
+  @Get('problemas')
+  problemas() {
+    return this.chargesService.problemas();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.chargesService.findOne(id);

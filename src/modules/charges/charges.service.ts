@@ -71,6 +71,29 @@ export class ChargesService {
     });
   }
 
+  /**
+   * Cobranças em aberto que não foram (ou não podem ser) enviadas: último envio
+   * de WhatsApp falhou, sem boleto (linha digitável/Pix) ou cliente sem telefone.
+   */
+  async problemas() {
+    const abertas = await this.prisma.charge.findMany({
+      where: { status: { in: ['PENDENTE', 'ENVIADA', 'VENCIDA'] } },
+      include: { client: true, notifications: { where: { channel: 'WHATSAPP' }, orderBy: { queuedAt: 'desc' }, take: 1 } },
+      orderBy: { dueDate: 'asc' },
+    });
+    return abertas
+      .map((c) => {
+        const ultimo = c.notifications[0];
+        const problema =
+          ultimo?.status === 'FAILED' ? 'FALHA_ENVIO'
+          : !c.linhaDigitavel && !c.pixCopiaECola ? 'SEM_BOLETO'
+          : !c.client.phoneE164 ? 'SEM_TELEFONE'
+          : null;
+        return problema ? { ...c, problema } : null;
+      })
+      .filter(Boolean);
+  }
+
   async findOne(id: string) {
     const charge = await this.prisma.charge.findUnique({
       where: { id },
