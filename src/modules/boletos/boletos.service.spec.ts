@@ -81,6 +81,7 @@ describe('BoletosService - importar boletos já gerados no Inter', () => {
     });
     expect(prisma.charge.create.mock.calls[0][0].data).toMatchObject({
       amountCents: 15050,
+      origem: 'INTER',
       boletoCodigoSolicitacao: 'cod-1',
       linhaDigitavel: '0779000',
       pixCopiaECola: '000201pix',

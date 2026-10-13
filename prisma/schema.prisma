@@ -95,6 +95,9 @@ model Charge {
   // nesse caso não regeramos o boleto (Inter não aceita data passada), então
   // o boleto real continua com a data antiga.
   boletoDataVencimento    DateTime?
+  // De onde veio a cobrança: PAINEL (criada aqui, boleto gerado por nós) ou
+  // INTER (boleto já existente no Inter, importado sem gerar boleto novo).
+  origem                  String  @default("PAINEL")
 
   notifications NotificationLog[]
   conversations Conversation[]

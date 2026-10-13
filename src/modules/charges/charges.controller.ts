@@ -32,8 +32,12 @@ export class ChargesController {
   }
 
   @Get()
-  findAll(@Query('status') status?: ChargeStatus, @Query('clientId') clientId?: string) {
-    return this.chargesService.findAll({ status, clientId });
+  findAll(
+    @Query('status') status?: ChargeStatus,
+    @Query('clientId') clientId?: string,
+    @Query('origem') origem?: string,
+  ) {
+    return this.chargesService.findAll({ status, clientId, origem });
   }
 
   @Get(':id')

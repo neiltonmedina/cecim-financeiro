@@ -254,6 +254,7 @@ export class BoletosService {
             dueDate: vencimento,
             status: b.vencimento < hoje ? 'VENCIDA' : 'PENDENTE',
             externalRef: codigo,
+            origem: 'INTER',
             boletoCodigoSolicitacao: codigo,
             boletoDataVencimento: vencimento,
             boletoPdfBase64: pdf ?? null,

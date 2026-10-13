@@ -62,9 +62,9 @@ export class ChargesService {
     return { criadas: charges.length, charges };
   }
 
-  findAll(params: { status?: ChargeStatus; clientId?: string }) {
+  findAll(params: { status?: ChargeStatus; clientId?: string; origem?: string }) {
     return this.prisma.charge.findMany({
-      where: { status: params.status, clientId: params.clientId },
+      where: { status: params.status, clientId: params.clientId, origem: params.origem || undefined },
       include: { client: true },
       orderBy: { dueDate: 'asc' },
     });

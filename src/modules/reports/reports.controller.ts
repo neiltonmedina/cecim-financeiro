@@ -10,6 +10,12 @@ import { ReportsService } from './reports.service';
 export class ReportsController {
   constructor(private readonly reportsService: ReportsService) {}
 
+  /** Números consolidados para o dashboard do painel (carteira, recebimentos, régua e envios). */
+  @Get('dashboard')
+  dashboard() {
+    return this.reportsService.dashboard();
+  }
+
   /** Relatório periódico do agente de cobrança: contatados, respostas, acordos, pagamentos, etc. */
   @Get('cobranca')
   cobranca(@Query('from') from?: string, @Query('to') to?: string) {
