@@ -122,6 +122,33 @@ export class ChargesService {
     return charge;
   }
 
+  /**
+   * Gera o boleto no Inter para uma cobrança que ficou sem boleto (a geração
+   * falhou na criação). Nunca gera se já existe boleto - evita duplicata. Se o
+   * vencimento já passou, usa hoje (o Inter não aceita data passada).
+   */
+  async gerarBoleto(id: string) {
+    const charge = await this.findOne(id);
+    if (charge.boletoCodigoSolicitacao) {
+      throw new BadRequestException('Esta cobrança já tem boleto no Inter - não é gerado outro.');
+    }
+    if (charge.status === 'PAGA' || charge.status === 'CANCELADA') {
+      throw new BadRequestException('Cobrança paga ou cancelada.');
+    }
+    if (!this.boletosService.isConfigured()) {
+      throw new BadRequestException('Integração com o Inter não configurada.');
+    }
+    const hoje = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z');
+    const base = charge.dueDate < hoje
+      ? await this.prisma.charge.update({ where: { id }, data: { dueDate: hoje } })
+      : charge;
+    const resultado = await this.boletosService.gerarBoletoParaCobranca(base, charge.client);
+    if (!resultado.boletoCodigoSolicitacao) {
+      throw new BadRequestException('O Inter recusou o boleto: ' + (resultado.boletoErro ?? 'motivo não informado'));
+    }
+    return resultado;
+  }
+
   async cancel(id: string) {
     await this.findOne(id);
     const charge = await this.prisma.charge.update({
@@ -175,7 +202,9 @@ export class ChargesService {
       const client = clientsById.get(charge.clientId);
       if (!client?.active) continue;
       const channels = this.notificationsService.resolveChannelsForClient(client, dto.channels);
-      if (channels.includes('WHATSAPP')) {
+      const atualizada = await this.prisma.charge.findUnique({ where: { id: charge.id } });
+      const temBoleto = !!(atualizada?.linhaDigitavel || atualizada?.pixCopiaECola);
+      if (channels.includes('WHATSAPP') && temBoleto) {
         await this.conversationsService.ensureConversationForCharge(charge.clientId, charge.id, intervalDays);
       }
     }

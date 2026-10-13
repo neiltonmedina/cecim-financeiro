@@ -1310,11 +1310,18 @@ async function loadCharges(origem = chargesOrigem) {
     let html = '<table><thead><tr><th></th><th>Cliente</th><th>WhatsApp</th><th>Descrição</th><th>Valor</th><th>Vencimento</th><th>Status</th></tr></thead><tbody>';
     for (const c of charges) {
       const semTelefone = !c.client?.phoneE164;
-      // Sem WhatsApp cadastrado a mensagem não tem para onde ir - bloqueia a seleção.
-      const disabled = (c.status === 'PAGA' || c.status === 'CANCELADA' || semTelefone) ? 'disabled' : '';
-      const telefoneCell = semTelefone
-        ? `<span style="color:var(--red); font-weight:600;">sem telefone</span> <a href="#" onclick="switchTab('clients'); editarCliente('${c.clientId}'); return false;" style="font-size:12px;">cadastrar</a>`
-        : `<span style="font-variant-numeric:tabular-nums;">${c.client.phoneE164}</span>`;
+      const semBoleto = !c.linhaDigitavel && !c.pixCopiaECola;
+      // Sem WhatsApp ou sem boleto a mensagem não pode ser enviada - bloqueia a seleção.
+      const disabled = (c.status === 'PAGA' || c.status === 'CANCELADA' || semTelefone || semBoleto) ? 'disabled' : '';
+      const avisoBoleto = semBoleto && c.status !== 'PAGA' && c.status !== 'CANCELADA'
+        ? `<div style="margin-top:4px; font-size:12px; color:var(--red);" title="${(c.boletoErro || '').replaceAll('"', "'")}">⚠ sem boleto${c.boletoErro ? ' - ' + c.boletoErro.slice(0, 80) : ''}
+            <button class="secondary" style="padding:3px 8px; font-size:12px; margin-left:4px;" onclick="gerarBoletoCobranca('${c.id}', this)">Gerar boleto</button></div>`
+        : '';
+      const telefoneCell = (semTelefone
+        ? `<span style="color:var(--red); font-weight:600;">sem telefone</span>`
+        : `<span style="font-variant-numeric:tabular-nums;">${c.client.phoneE164}</span>`) +
+        ` <button class="secondary" style="padding:3px 9px; font-size:12px; margin-left:4px;" title="Corrigir o WhatsApp deste cliente"
+            onclick="editarTelefone('${c.clientId}', '${c.client?.phoneE164 ?? ''}', '${(c.client?.name ?? '').replaceAll("'", '')}')">${semTelefone ? 'Cadastrar' : 'Editar'}</button>`;
       const divergeBoleto = c.boletoDataVencimento &&
         new Date(c.boletoDataVencimento).toISOString().slice(0, 10) !== new Date(c.dueDate).toISOString().slice(0, 10);
       const vencimentoCell = divergeBoleto
@@ -1322,7 +1329,7 @@ async function loadCharges(origem = chargesOrigem) {
         : fmtDate(c.dueDate);
       html += `<tr>
         <td><input type="checkbox" ${disabled} onchange="toggleChargeSelection('${c.id}', this.checked)" /></td>
-        <td>${c.client?.name ?? '-'}</td>
+        <td>${c.client?.name ?? '-'}${avisoBoleto}</td>
         <td>${telefoneCell}</td>
         <td>${c.description}</td>
         <td>${fmtMoney(c.amountCents)}</td>
@@ -1334,6 +1341,34 @@ async function loadCharges(origem = chargesOrigem) {
     el.innerHTML = html;
   } catch (e) {
     el.innerHTML = '<div class="empty">' + e.message + '</div>';
+  }
+}
+
+/** Corrige o WhatsApp do cliente direto na lista de cobranças. */
+async function editarTelefone(clientId, atual, nome) {
+  const digitado = prompt(`WhatsApp de ${nome} (DDD + número, ex: 94992453959):`, (atual || '').replace(/^\+55/, ''));
+  if (digitado === null) return;
+  const tel = telefoneDaPlanilha(digitado);
+  if (!tel) { alert('Telefone inválido. Use DDD + número, ex: 94992453959.'); return; }
+  try {
+    await api('/clients/' + clientId, { method: 'PATCH', body: JSON.stringify({ phoneE164: tel }) });
+    loadCharges();
+  } catch (e) {
+    alert('Não foi possível salvar o telefone: ' + e.message);
+  }
+}
+
+async function gerarBoletoCobranca(id, btn) {
+  if (!confirm('Gerar o boleto desta cobrança no Inter agora? Se o vencimento já passou, o boleto sai com vencimento hoje.')) return;
+  btn.disabled = true;
+  btn.textContent = 'Gerando...';
+  try {
+    await api('/charges/' + id + '/gerar-boleto', { method: 'POST' });
+    loadCharges();
+  } catch (e) {
+    alert('Não foi possível gerar o boleto: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = 'Gerar boleto';
   }
 }
 

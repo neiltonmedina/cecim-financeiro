@@ -97,8 +97,13 @@ export class NotificationsService {
         continue;
       }
 
-      const channels = this.resolveChannelsForClient(charge.client, options.channels);
+      let channels = this.resolveChannelsForClient(charge.client, options.channels);
       const skipped: string[] = [];
+      // O modelo do WhatsApp precisa da linha digitável (ou do Pix): sem boleto, a Meta recusa.
+      if (channels.includes(Channel.WHATSAPP) && !charge.linhaDigitavel && !charge.pixCopiaECola) {
+        channels = channels.filter((c) => c !== Channel.WHATSAPP);
+        skipped.push(`${charge.client.name}: cobrança sem boleto gerado no Inter`);
+      }
       if (!channels.length) {
         skipped.push('nenhum canal disponível (verifique telefone/e-mail e opt-in do cliente)');
       }

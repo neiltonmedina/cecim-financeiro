@@ -76,13 +76,21 @@ export class NotificationsProcessor extends WorkerHost {
       const body = renderTemplate(template.body, context);
       const subject = template.subject ? renderTemplate(template.subject, context) : undefined;
 
+      const templateParams = this.buildWhatsAppTemplateParams(log.templateType, context);
+      if (log.channel === 'WHATSAPP' && template.providerTemplateName && templateParams.some((p) => !String(p ?? '').trim())) {
+        // A Meta recusaria com "(#131008) Required parameter is missing" - explica o motivo real.
+        throw new Error(
+          'Cobrança sem boleto (linha digitável/Pix vazios) - o boleto não foi gerado no Inter. Gere o boleto no painel e dispare de novo.',
+        );
+      }
+
       const provider = this.providers[log.channel];
       const result = await provider.send({
         destination: log.destination,
         body,
         subject,
         providerTemplateName: template.providerTemplateName ?? undefined,
-        templateParams: this.buildWhatsAppTemplateParams(log.templateType, context),
+        templateParams,
       });
 
       await this.prisma.notificationLog.update({

@@ -47,7 +47,7 @@ describe('NotificationsService.dispatchCharges - fila indisponível', () => {
     const prisma: any = {
       charge: {
         findMany: jest.fn().mockResolvedValue([
-          { id: 'ch1', clientId: 'c1', status: 'VENCIDA', client: { active: true, whatsappOptIn: true, phoneE164: '+5594992453959' } },
+          { id: 'ch1', clientId: 'c1', status: 'VENCIDA', linhaDigitavel: '0779', client: { active: true, whatsappOptIn: true, phoneE164: '+5594992453959' } },
         ]),
         update: jest.fn(),
       },
@@ -74,5 +74,26 @@ describe('NotificationsService.reenviarParadasNaFila', () => {
 
     expect(prisma.notificationLog.findMany.mock.calls[0][0].where.status).toBe('QUEUED');
     expect(processor.enviarNotificacao).toHaveBeenCalledTimes(2); // uma falha não interrompe as demais
+  });
+});
+
+describe('NotificationsService.dispatchCharges - cobrança sem boleto', () => {
+  it('não envia WhatsApp sem linha digitável/Pix (a Meta recusaria com #131008)', async () => {
+    const prisma: any = {
+      charge: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'ch1', clientId: 'c1', status: 'PENDENTE', linhaDigitavel: null, pixCopiaECola: null, client: { name: 'CEVIA', active: true, whatsappOptIn: true, phoneE164: '+5594981904333' } },
+        ]),
+        update: jest.fn(),
+      },
+      notificationLog: { create: jest.fn() },
+    };
+    const service = new NotificationsService(prisma, { add: jest.fn() } as any, {} as any);
+
+    const r = await service.dispatchCharges(['ch1'], { channels: [Channel.WHATSAPP], templateType: 'COBRANCA_PENDENTE' });
+
+    expect(prisma.notificationLog.create).not.toHaveBeenCalled();
+    expect(r[0].channelsQueued).toEqual([]);
+    expect(r[0].skipped[0]).toContain('sem boleto');
   });
 });

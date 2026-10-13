@@ -56,6 +56,12 @@ export class ChargesController {
     return this.chargesService.markAsPaid(id);
   }
 
+  /** Gera o boleto no Inter para uma cobrança que ficou sem boleto (nunca duplica). */
+  @Post(':id/gerar-boleto')
+  gerarBoleto(@Param('id') id: string) {
+    return this.chargesService.gerarBoleto(id);
+  }
+
   @Patch(':id/cancel')
   cancel(@Param('id') id: string) {
     return this.chargesService.cancel(id);
