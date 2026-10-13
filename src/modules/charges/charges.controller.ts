@@ -69,7 +69,7 @@ export class ChargesController {
   }
 
   @Patch(':id/cancel')
-  cancel(@Param('id') id: string) {
-    return this.chargesService.cancel(id);
+  cancel(@Param('id') id: string, @Query('cancelarNoInter') cancelarNoInter?: string) {
+    return this.chargesService.cancel(id, cancelarNoInter === 'true');
   }
 }

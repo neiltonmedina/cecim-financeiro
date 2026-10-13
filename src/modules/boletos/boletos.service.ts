@@ -23,7 +23,7 @@ export function traduzirErroInter(error: any): string {
   if (violacoes.length) {
     const itens = violacoes.map((v) => {
       const prop = String(v.propriedade ?? '').split('.').pop() ?? '';
-      return `${CAMPOS_INTER[prop] ?? prop}: ${v.razao ?? 'inválido'}`;
+      return `${CAMPOS_INTER[prop] ?? prop}: ${String(v.razao ?? 'inválido').replace(/\.$/, '')}`;
     });
     const doCliente = violacoes.some((v) => String(v.propriedade ?? '').includes('pagador'));
     return `${doCliente ? 'Dado do cliente inválido para o Inter' : 'Dado inválido para o Inter'} - ${itens.join('; ')}.` +
@@ -188,6 +188,15 @@ export class BoletosService {
     } catch (error: any) {
       this.logger.warn(`Não foi possível completar linha digitável da cobrança ${charge.id}: ${error.message}`);
       return charge;
+    }
+  }
+
+  /** Cancela (baixa) o boleto no Inter. Lança erro traduzido se o Inter recusar. */
+  async cancelarNoInter(codigoSolicitacao: string, motivo: string) {
+    try {
+      await this.inter.cancelarBoleto(codigoSolicitacao, motivo);
+    } catch (error: any) {
+      throw new Error(traduzirErroInter(error));
     }
   }
 

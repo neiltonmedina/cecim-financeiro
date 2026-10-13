@@ -1372,7 +1372,7 @@ async function loadCharges(origem = chargesOrigem) {
       // Sem WhatsApp ou sem boleto a mensagem não pode ser enviada - bloqueia a seleção.
       const disabled = (c.status === 'PAGA' || c.status === 'CANCELADA' || semTelefone || semBoleto) ? 'disabled' : '';
       const avisoBoleto = semBoleto && c.status !== 'PAGA' && c.status !== 'CANCELADA'
-        ? `<div style="margin-top:4px; font-size:12px; color:var(--red);" title="${(c.boletoErro || '').replaceAll('"', "'")}">⚠ sem boleto${c.boletoErro ? ' - ' + c.boletoErro.slice(0, 80) : ''}
+        ? `<div style="margin-top:4px; font-size:12px; color:var(--red);" title="${traduzirBoletoErro(c.boletoErro).replaceAll('"', "'")}">⚠ sem boleto${c.boletoErro ? ' - ' + traduzirBoletoErro(c.boletoErro).slice(0, 90) : ''}
             <button class="secondary" style="padding:3px 8px; font-size:12px; margin-left:4px;" onclick="abrirCadastroParaGerarBoleto('${c.id}', '${c.clientId}')">Gerar boleto</button></div>`
         : '';
       const telefoneCell = (semTelefone
@@ -1530,6 +1530,50 @@ const TIPOS_PROBLEMA = {
 };
 
 /** Contador vermelho no menu - pisca enquanto houver cobrança com problema. */
+const CAMPOS_INTER_PT = {
+  uf: 'UF (estado)', cep: 'CEP', cidade: 'cidade', endereco: 'rua/endereço', bairro: 'bairro', numero: 'número',
+  cpfCnpj: 'CPF/CNPJ', nome: 'nome', email: 'e-mail', dataVencimento: 'vencimento', valorNominal: 'valor',
+  multa: 'multa (configuração da empresa)', mora: 'juros de mora (configuração da empresa)',
+};
+/** Erro de boleto gravado antes da tradução (JSON cru do Inter) -> texto em português. */
+function traduzirBoletoErro(texto) {
+  const t = String(texto || '');
+  if (!t.trim().startsWith('{')) return t;
+  try {
+    const d = JSON.parse(t);
+    const v = Array.isArray(d.violacoes) ? d.violacoes : [];
+    if (v.length) {
+      const itens = v.map((x) => {
+        const campo = String(x.propriedade || '').split('.').pop();
+        return `${CAMPOS_INTER_PT[campo] || campo}: ${String(x.razao || 'inválido').replace(/\.$/, '')}`;
+      });
+      const config = v.some((x) => /multa|mora/.test(String(x.propriedade)));
+      return 'Dado inválido para o Inter - ' + itens.join('; ') + '.' +
+        (config ? ' Não é problema do cliente: vem da configuração de multa/juros no Render (INTER_MULTA_PERCENTUAL / INTER_MORA_TAXA_MENSAL), que deve ser só número, ex: 2 ou 2.5. Confira e gere o boleto de novo.'
+          : ' Corrija no cadastro do cliente.');
+    }
+    return [d.title, d.detail].filter(Boolean).join(' ') || t;
+  } catch (e) {
+    return t;
+  }
+}
+
+/** Exclui (cancela) a cobrança: sai das listas e a régua para; opcionalmente cancela o boleto no Inter. */
+async function excluirCobranca(id, nome, temBoletoInter) {
+  if (!confirm(`Excluir a cobrança de ${nome}?\n\nEla sai das listas e a régua de cobrança para.`)) return;
+  let noInter = false;
+  if (temBoletoInter) {
+    noInter = confirm('Esta cobrança tem boleto no Inter.\n\nOK = cancelar o boleto no Inter também (o cliente não consegue mais pagar).\n' +
+      'Cancelar = excluir só do painel (o boleto continua valendo no Inter).');
+  }
+  try {
+    await api('/charges/' + id + '/cancel' + (noInter ? '?cancelarNoInter=true' : ''), { method: 'PATCH' });
+    loadCharges();
+  } catch (e) {
+    alert('Não foi possível excluir: ' + e.message);
+  }
+}
+
 async function atualizarBadgeProblemas() {
   try {
     problemasDados = await api('/charges/problemas');
@@ -1574,7 +1618,7 @@ function renderProblemas() {
       acoes = botoesSolucao({ chargeId: c.id, clientId: c.clientId, telefone: c.client?.phoneE164, nome, temBoleto: !!(c.linhaDigitavel || c.pixCopiaECola), erro: n?.errorMessage }) +
         `<button class="secondary" onclick="mostrarErroEnvio('${c.id}')">Detalhes</button>`;
     } else if (c.problema === 'SEM_BOLETO') {
-      motivo = 'O boleto não foi gerado no Inter' + (c.boletoErro ? ': ' + c.boletoErro : '.');
+      motivo = 'O boleto não foi gerado no Inter' + (c.boletoErro ? ': ' + traduzirBoletoErro(c.boletoErro) : '.');
       acoes = `<button onclick="abrirCadastroParaGerarBoleto('${c.id}', '${c.clientId}')">🧾 Conferir cadastro e gerar boleto</button>`;
     } else {
       motivo = 'O cliente não tem WhatsApp cadastrado.';
@@ -1586,7 +1630,8 @@ function renderProblemas() {
       <td style="white-space:nowrap;">${fmtMoney(c.amountCents)}</td>
       <td>${fmtDate(c.dueDate)}</td>
       <td style="max-width:320px;"><span style="font-weight:700; color:${tipo.cor};">⚠ ${tipo.label}</span><div style="font-size:12.5px; color:var(--muted); margin-top:2px;">${motivo}</div></td>
-      <td><div style="display:flex; gap:6px; flex-wrap:wrap;">${acoes}</div></td>
+      <td><div style="display:flex; gap:6px; flex-wrap:wrap;">${acoes}
+        <button class="secondary" style="color:var(--red);" title="Excluir esta cobrança" onclick="excluirCobranca('${c.id}', '${nome}', ${!!c.boletoCodigoSolicitacao})">🗑 Excluir</button></div></td>
     </tr>`;
   }
   el.innerHTML = html + '</tbody></table>';

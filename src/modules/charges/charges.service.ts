@@ -173,8 +173,20 @@ export class ChargesService {
     return resultado;
   }
 
-  async cancel(id: string) {
-    await this.findOne(id);
+  /**
+   * Cancela a cobrança no painel (sai das listas e encerra a régua). Com
+   * cancelarNoInter, também cancela o boleto no Inter - se o Inter recusar,
+   * nada é cancelado aqui.
+   */
+  async cancel(id: string, cancelarNoInter = false) {
+    const existente = await this.findOne(id);
+    if (cancelarNoInter && existente.boletoCodigoSolicitacao && existente.status !== 'PAGA') {
+      try {
+        await this.boletosService.cancelarNoInter(existente.boletoCodigoSolicitacao, 'Cobrança cancelada no painel');
+      } catch (error: any) {
+        throw new BadRequestException('O Inter não cancelou o boleto: ' + error.message);
+      }
+    }
     const charge = await this.prisma.charge.update({
       where: { id },
       data: { status: 'CANCELADA', canceledAt: new Date() },

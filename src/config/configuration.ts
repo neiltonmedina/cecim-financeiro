@@ -40,8 +40,9 @@ export default () => ({
     keyBase64: process.env.INTER_KEY_BASE64 ?? '',
     baseUrl: process.env.INTER_BASE_URL ?? 'https://cdpj.partners.bancointer.com.br',
     // Multa e juros de mora padrão aplicados a todo boleto gerado (nunca inventados pelo agente - config fixa da empresa)
-    multaPercentual: parseFloat(process.env.INTER_MULTA_PERCENTUAL ?? '0'),
-    moraTaxaMensal: parseFloat(process.env.INTER_MORA_TAXA_MENSAL ?? '0'),
+    // Aceita vírgula ("2,5") - parseFloat sozinho cortaria para 2.
+    multaPercentual: parseFloat((process.env.INTER_MULTA_PERCENTUAL ?? '0').replace(',', '.')) || 0,
+    moraTaxaMensal: parseFloat((process.env.INTER_MORA_TAXA_MENSAL ?? '0').replace(',', '.')) || 0,
   },
   escalationEmail: process.env.ESCALATION_EMAIL ?? '',
   smtp: {
