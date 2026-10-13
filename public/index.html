@@ -1340,14 +1340,17 @@ async function loadCharges(origem = chargesOrigem) {
     }
     html += '</tbody></table>';
     el.innerHTML = html;
-    ultimosEnvios = Object.fromEntries(charges.map((c) => [c.id, { cliente: c.client?.name, envio: c.notifications?.[0] }]));
+    ultimosEnvios = Object.fromEntries(charges.map((c) => [c.id, {
+      cliente: c.client?.name, envio: c.notifications?.[0], clientId: c.clientId,
+      telefone: c.client?.phoneE164, temBoleto: !!(c.linhaDigitavel || c.pixCopiaECola),
+    }]));
   } catch (e) {
     el.innerHTML = '<div class="empty">' + e.message + '</div>';
   }
 }
 
 /** Corrige o WhatsApp do cliente direto na lista de cobranças. */
-async function editarTelefone(clientId, atual, nome) {
+async function editarTelefone(clientId, atual, nome, reenviarChargeId, intervalDays = 5) {
   const digitado = prompt(`WhatsApp de ${nome} (DDD + número, ex: 94992453959):`, (atual || '').replace(/^\+55/, ''));
   if (digitado === null) return;
   const tel = telefoneDaPlanilha(digitado);
@@ -1357,21 +1360,67 @@ async function editarTelefone(clientId, atual, nome) {
     loadCharges();
   } catch (e) {
     alert('Não foi possível salvar o telefone: ' + e.message);
+    return;
   }
+  if (reenviarChargeId) await redispararCobranca(reenviarChargeId, true, intervalDays);
 }
 
-async function gerarBoletoCobranca(id, btn) {
-  if (!confirm('Gerar o boleto desta cobrança no Inter agora? Se o vencimento já passou, o boleto sai com vencimento hoje.')) return;
-  btn.disabled = true;
-  btn.textContent = 'Gerando...';
+async function gerarBoletoCobranca(id, btn, reenviar = false, intervalDays = 5) {
+  const pergunta = reenviar
+    ? 'Gerar o boleto no Inter e enviar a cobrança pelo WhatsApp agora? Se o vencimento já passou, o boleto sai com vencimento hoje.'
+    : 'Gerar o boleto desta cobrança no Inter agora? Se o vencimento já passou, o boleto sai com vencimento hoje.';
+  if (!confirm(pergunta)) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Gerando...'; }
   try {
     await api('/charges/' + id + '/gerar-boleto', { method: 'POST' });
     loadCharges();
+    if (reenviar || confirm('Boleto gerado no Inter. Enviar a cobrança pelo WhatsApp agora?')) await redispararCobranca(id, true, intervalDays);
   } catch (e) {
     alert('Não foi possível gerar o boleto: ' + e.message);
-    btn.disabled = false;
-    btn.textContent = 'Gerar boleto';
+    if (btn) { btn.disabled = false; btn.textContent = 'Gerar boleto'; }
   }
+}
+
+/** Dispara de novo uma única cobrança (depois de corrigir o problema). */
+async function redispararCobranca(chargeId, semPerguntar, intervalDays = 5) {
+  if (!semPerguntar && !confirm('Enviar a cobrança pelo WhatsApp de novo agora?')) return;
+  try {
+    const r = await api('/charges/dispatch', {
+      method: 'POST',
+      body: JSON.stringify({ chargeIds: [chargeId], channels: ['WHATSAPP'], intervalDays, confirmado: true }),
+    });
+    const res = r[0];
+    alert(res?.channelsQueued?.length ? 'Cobrança enviada para a fila do WhatsApp. Em instantes ela chega ao cliente.'
+      : 'Não foi enviada: ' + (res?.skipped?.join('; ') || 'motivo não informado'));
+    loadCharges();
+  } catch (e) {
+    alert('Erro ao enviar: ' + e.message);
+  }
+}
+
+/**
+ * Qual correção cabe para cada erro: boleto (gerar), telefone (editar) ou só
+ * tentar de novo. Usado para mostrar apenas os botões que resolvem o problema.
+ */
+function solucaoDoErro(msg, temBoleto) {
+  const t = String(msg || '');
+  if (/#131008\b|sem boleto/i.test(t)) return temBoleto ? 'reenviar' : 'boleto';
+  if (/#(131026|131009|100|131050)\b|phone|number|recipient|telefone/i.test(t)) return 'telefone';
+  if (/#(132000|132001|132012|132015|132016|133010|190|131031|368|131042|131030)\b|token|template ativo/i.test(t)) return 'suporte';
+  return 'reenviar';
+}
+
+/** Botões de solução para um envio que falhou (só os que resolvem aquele erro). */
+function botoesSolucao({ chargeId, clientId, telefone, nome, temBoleto, erro, intervalDays }) {
+  const nomeSeguro = String(nome || '').replaceAll("'", '');
+  const tipo = solucaoDoErro(erro, temBoleto);
+  const btnEditar = `<button onclick="closeModal(); editarTelefone('${clientId}', '${telefone || ''}', '${nomeSeguro}', '${chargeId}', ${intervalDays || 5})">📞 Corrigir telefone e reenviar</button>`;
+  const btnBoleto = `<button onclick="closeModal(); gerarBoletoCobranca('${chargeId}', null, true, ${intervalDays || 5})">🧾 Gerar boleto e reenviar</button>`;
+  const btnReenviar = `<button class="secondary" onclick="closeModal(); redispararCobranca('${chargeId}', false, ${intervalDays || 5})">↻ Disparar de novo</button>`;
+  if (tipo === 'boleto') return btnBoleto;
+  if (tipo === 'telefone') return btnEditar + btnReenviar;
+  if (tipo === 'suporte') return '<span style="font-size:12.5px; color:var(--muted); align-self:center;">Problema na conta/modelo do WhatsApp - não é do cliente. Avise o suporte do sistema.</span>';
+  return btnReenviar;
 }
 
 let ultimosEnvios = {};
@@ -1381,7 +1430,7 @@ let ultimosEnvios = {};
  * Códigos: https://developers.facebook.com/docs/whatsapp/cloud-api/support/error-codes
  */
 const ERROS_WHATSAPP = {
-  131008: 'Cobrança sem boleto (campo da linha digitável/Pix foi vazio na mensagem). Use "Gerar boleto" e dispare de novo.',
+  131008: 'Cobrança sem boleto (campo da linha digitável/Pix foi vazio na mensagem). Clique em "Gerar boleto e reenviar".',
   132000: 'A mensagem tem campos a mais ou a menos que o modelo aprovado na Meta. Avise o suporte do sistema.',
   132012: 'Algum campo da mensagem está em formato inválido para o modelo aprovado. Avise o suporte do sistema.',
   131009: 'Algum dado da mensagem é inválido - geralmente o telefone. Confira o número (DDD + número) no botão Editar.',
@@ -1407,7 +1456,7 @@ function explicarErroEnvio(msg) {
   const texto = String(msg || '');
   const codigo = (texto.match(/#(\d{2,6})/) || [])[1];
   if (codigo && ERROS_WHATSAPP[codigo]) return ERROS_WHATSAPP[codigo];
-  if (/sem boleto/i.test(texto)) return 'Cobrança sem boleto (linha digitável/Pix vazios). Use "Gerar boleto" e dispare de novo.';
+  if (/sem boleto/i.test(texto)) return 'Cobrança sem boleto (linha digitável/Pix vazios). Clique em "Gerar boleto e reenviar".';
   if (/template ativo não encontrado/i.test(texto)) return 'Modelo de mensagem não cadastrado/ativo no painel (aba Modelos de mensagem).';
   if (/fetch failed|timeout|ECONN|ETIMEDOUT|socket/i.test(texto)) return 'Sem conexão com o WhatsApp no momento. Dispare de novo em alguns minutos.';
   if (/token|OAuth/i.test(texto)) return ERROS_WHATSAPP[190];
@@ -1426,13 +1475,24 @@ function iconeEnvio(c) {
 }
 
 function mostrarErroEnvio(chargeId) {
-  const { cliente, envio: n } = ultimosEnvios[chargeId] ?? {};
+  const { cliente, envio: n, clientId, telefone, temBoleto } = ultimosEnvios[chargeId] ?? {};
   if (!n) return;
   if (n.status === 'FAILED') {
-    alert(`⚠️ Cobrança NÃO enviada para ${cliente}\n\n` +
-      `O que aconteceu: ${explicarErroEnvio(n.errorMessage)}\n\n` +
-      `Número usado: ${n.destination}\nTentativa(s): ${n.attempt} · ${fmtDateTime(n.failedAt || n.queuedAt)}\n\n` +
-      `Detalhe técnico: ${n.errorMessage || 'não informado pelo WhatsApp'}`);
+    document.getElementById('modal').innerHTML = `
+      <h3 style="margin-bottom:4px;">⚠️ Cobrança não enviada</h3>
+      <p style="color:var(--muted); font-size:13px; margin-top:0;">${cliente}</p>
+      <div style="padding:12px 14px; border-radius:10px; background:var(--red-soft); color:var(--red); font-size:14px;">
+        <strong>O que aconteceu:</strong> ${explicarErroEnvio(n.errorMessage)}
+      </div>
+      <div style="font-size:12.5px; color:var(--muted); margin-top:10px; line-height:1.6;">
+        Número usado: ${n.destination} · tentativa ${n.attempt} · ${fmtDateTime(n.failedAt || n.queuedAt)}<br>
+        Detalhe técnico: ${n.errorMessage || 'não informado pelo WhatsApp'}
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:18px; flex-wrap:wrap;">
+        ${botoesSolucao({ chargeId, clientId, telefone, nome: cliente, temBoleto, erro: n.errorMessage })}
+        <button class="secondary" onclick="closeModal()">Fechar</button>
+      </div>`;
+    document.getElementById('modal-overlay').classList.add('open');
   } else {
     alert(`⏳ Cobrança de ${cliente} na fila de envio desde ${fmtDateTime(n.queuedAt)}.\nSe passar de 10 minutos, o sistema reenvia sozinho.`);
   }
@@ -1522,7 +1582,11 @@ async function openConversation(id) {
         QUEUED: ['⏳', 'Na fila de envio desde ' + (ultimo ? fmtDateTime(ultimo.queuedAt) : '') + '. Se passar de 10 minutos, o sistema reenvia sozinho.', 'var(--yellow)'],
         SENDING: ['⏳', 'Enviando agora...', 'var(--yellow)'],
         FAILED: ['⚠️', 'Não enviada. ' + explicarErroEnvio(ultimo?.errorMessage) +
-          '<div style="color:var(--muted); font-size:12px; margin-top:4px;">Detalhe técnico: ' + (ultimo?.errorMessage || 'não informado') + '</div>', 'var(--red)'],
+          '<div style="color:var(--muted); font-size:12px; margin-top:4px;">Detalhe técnico: ' + (ultimo?.errorMessage || 'não informado') + '</div>' +
+          '<div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">' + botoesSolucao({
+            chargeId: conv.chargeId, clientId: conv.clientId, telefone: conv.client?.phoneE164, nome: conv.client?.name,
+            temBoleto: !!(conv.charge?.linhaDigitavel || conv.charge?.pixCopiaECola), erro: ultimo?.errorMessage, intervalDays: conv.intervalDays,
+          }) + '</div>', 'var(--red)'],
         SENT: ['✓', 'Enviada, mas ainda não registrada na conversa.', 'var(--green)'],
       };
       const [ico, texto, cor] = ultimo ? (SITUACAO[ultimo.status] ?? ['•', ultimo.status, 'var(--muted)'])
