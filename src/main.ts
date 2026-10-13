@@ -1,11 +1,14 @@
 import 'reflect-metadata';
-import { NestFactory } from '@nestjs/core';
+import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { ErroInternoFilter } from './common/erro-interno.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  app.useGlobalFilters(new ErroInternoFilter(app.get(HttpAdapterHost).httpAdapter));
 
   app.useGlobalPipes(
     new ValidationPipe({

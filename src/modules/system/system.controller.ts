@@ -32,6 +32,8 @@ export class SystemController {
       anthropic: !!this.config.get<string>('anthropic.apiKey'),
       sms: this.sms.isConfigured(),
       email: this.email.isConfigured(),
+      // Commit publicado no Render - mostra no painel se a última versão já está no ar.
+      versao: (process.env.RENDER_GIT_COMMIT ?? '').slice(0, 7),
     };
   }
 }

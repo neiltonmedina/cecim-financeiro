@@ -503,7 +503,7 @@ async function loadHealth() {
           <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${color}; margin-right:4px;"></span>${label}
         </span>`;
       })
-      .join('');
+      .join('') + (h.versao ? `<span style="color:var(--muted);" title="Versão publicada no Render">versão ${h.versao}</span>` : '');
   } catch (e) {
     el.innerHTML = '';
   }
