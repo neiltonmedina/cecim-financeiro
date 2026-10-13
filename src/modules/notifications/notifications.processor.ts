@@ -11,7 +11,10 @@ import { EmailSmtpProvider } from './providers/email-smtp.provider';
 import { ChannelProvider } from './interfaces/channel-provider.interface';
 import { buildTemplateContext, renderTemplate, TemplateContext } from './utils/template-renderer.util';
 
-@Processor(NOTIFICATIONS_QUEUE)
+// Fila vazia: espera até 60s por job a cada consulta (padrão 5s) e checa jobs
+// travados a cada 5 min - o servidor fica acordado 24h e o polling padrão
+// esgotava a cota de comandos do Redis gerenciado (Upstash).
+@Processor(NOTIFICATIONS_QUEUE, { drainDelay: 60, stalledInterval: 5 * 60 * 1000 })
 export class NotificationsProcessor extends WorkerHost {
   private readonly logger = new Logger(NotificationsProcessor.name);
   private readonly providers: Record<Channel, ChannelProvider>;
@@ -32,8 +35,15 @@ export class NotificationsProcessor extends WorkerHost {
   }
 
   async process(job: Job<{ notificationLogId: string }>): Promise<void> {
-    const { notificationLogId } = job.data;
+    await this.enviarNotificacao(job.data.notificationLogId, job.attemptsMade + 1);
+  }
 
+  /**
+   * Envia uma notificação registrada em NotificationLog. Usado pelo worker da
+   * fila e, diretamente, quando a fila (Redis) está indisponível no disparo.
+   * Lança erro em caso de falha (o log já fica como FAILED).
+   */
+  async enviarNotificacao(notificationLogId: string, attempt = 1): Promise<void> {
     const log = await this.prisma.notificationLog.findUnique({
       where: { id: notificationLogId },
       include: { charge: { include: { client: true } } },
@@ -45,7 +55,7 @@ export class NotificationsProcessor extends WorkerHost {
 
     await this.prisma.notificationLog.update({
       where: { id: log.id },
-      data: { status: 'SENDING', attempt: job.attemptsMade + 1 },
+      data: { status: 'SENDING', attempt },
     });
 
     try {

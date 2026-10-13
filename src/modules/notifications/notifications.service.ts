@@ -4,6 +4,7 @@ import { Queue } from 'bullmq';
 import { Channel, Client, TemplateType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NOTIFICATIONS_QUEUE } from './notifications.constants';
+import { NotificationsProcessor } from './notifications.processor';
 
 export interface DispatchOptions {
   /** Canais a utilizar. Se omitido, usa todos os canais habilitados (opt-in) do cliente. */
@@ -18,7 +19,28 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     @InjectQueue(NOTIFICATIONS_QUEUE) private readonly queue: Queue,
+    private readonly processor: NotificationsProcessor,
   ) {}
+
+  /**
+   * Enfileira o envio; se a fila (Redis) estiver fora do ar ou sem cota, envia
+   * na hora, direto - o disparo não pode falhar por causa da fila.
+   */
+  private async enfileirarOuEnviar(notificationLogId: string) {
+    try {
+      await Promise.race([
+        this.queue.add(
+          'send-notification',
+          { notificationLogId },
+          { attempts: 3, backoff: { type: 'exponential', delay: 5000 }, removeOnComplete: 1000, removeOnFail: false },
+        ),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('tempo esgotado ao falar com o Redis')), 10000)),
+      ]);
+    } catch (error: any) {
+      this.logger.error(`Fila de envio indisponível (${error.message}) - enviando direto, sem fila.`);
+      await this.processor.enviarNotificacao(notificationLogId).catch(() => undefined); // falha já fica registrada no log
+    }
+  }
 
   /**
    * Determina para quais canais o cliente pode receber mensagens, dado seu
@@ -75,16 +97,7 @@ export class NotificationsService {
           },
         });
 
-        await this.queue.add(
-          'send-notification',
-          { notificationLogId: log.id },
-          {
-            attempts: 3,
-            backoff: { type: 'exponential', delay: 5000 },
-            removeOnComplete: 1000,
-            removeOnFail: false,
-          },
-        );
+        await this.enfileirarOuEnviar(log.id);
         queued.push(channel);
       }
 
