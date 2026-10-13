@@ -30,8 +30,15 @@ export class NotificationsService {
    */
   @Cron('*/10 * * * *')
   async reenviarParadasNaFila() {
+    // Tentativas antigas (mais de 2h) não são mais enviadas - o cliente receberia
+    // uma cobrança "atrasada" e possivelmente repetida. Ficam registradas como descartadas.
+    const limiteAntigas = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    await this.prisma.notificationLog.updateMany({
+      where: { status: 'QUEUED', queuedAt: { lt: limiteAntigas } },
+      data: { status: 'SKIPPED', errorMessage: 'Descartada: ficou mais de 2h na fila sem ser enviada. Dispare de novo se ainda precisar.' },
+    });
     const paradas = await this.prisma.notificationLog.findMany({
-      where: { status: 'QUEUED', queuedAt: { lt: new Date(Date.now() - 10 * 60 * 1000) } },
+      where: { status: 'QUEUED', queuedAt: { lt: new Date(Date.now() - 10 * 60 * 1000), gte: limiteAntigas } },
       select: { id: true },
       take: 50,
     });
@@ -106,6 +113,23 @@ export class NotificationsService {
       }
       if (!channels.length) {
         skipped.push('nenhum canal disponível (verifique telefone/e-mail e opt-in do cliente)');
+      }
+
+      // Clique repetido: se esta cobrança já está na fila/enviando ou foi enviada há
+      // menos de 5 min por este canal, não envia de novo.
+      const recente = channels.length && await this.prisma.notificationLog.findFirst({
+        where: {
+          chargeId: charge.id,
+          channel: { in: channels },
+          OR: [
+            { status: { in: ['QUEUED', 'SENDING'] }, queuedAt: { gte: new Date(Date.now() - 2 * 60 * 60 * 1000) } },
+            { status: { in: ['SENT', 'DELIVERED', 'READ'] }, sentAt: { gte: new Date(Date.now() - 5 * 60 * 1000) } },
+          ],
+        },
+      });
+      if (recente) {
+        skipped.push(`${charge.client.name}: já enviada/na fila há poucos minutos (envio repetido bloqueado)`);
+        channels = [];
       }
 
       const queued: Channel[] = [];

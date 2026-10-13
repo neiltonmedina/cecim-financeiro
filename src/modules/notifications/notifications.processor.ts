@@ -64,6 +64,27 @@ export class NotificationsProcessor extends WorkerHost {
       return;
     }
 
+    // Duplicata: a mesma cobrança já foi enviada por este canal depois que este
+    // envio entrou na fila (clique repetido, job antigo que ficou na fila, etc.).
+    const jaEnviada = await this.prisma.notificationLog.findFirst({
+      where: {
+        id: { not: log.id },
+        chargeId: log.chargeId,
+        channel: log.channel,
+        status: { in: ['SENT', 'DELIVERED', 'READ'] },
+        sentAt: { gte: new Date(log.queuedAt.getTime() - 10 * 60 * 1000) },
+      },
+      orderBy: { sentAt: 'desc' },
+    });
+    if (jaEnviada) {
+      await this.prisma.notificationLog.update({
+        where: { id: log.id },
+        data: { status: 'SKIPPED', errorMessage: `Duplicada: esta cobrança já foi enviada em ${jaEnviada.sentAt?.toISOString()}.` },
+      });
+      this.logger.warn(`Notificação ${log.id} ignorada: cobrança ${log.chargeId} já enviada (${jaEnviada.id}).`);
+      return;
+    }
+
     try {
       const template = await this.prisma.messageTemplate.findUnique({
         where: { channel_type: { channel: log.channel, type: log.templateType } },
