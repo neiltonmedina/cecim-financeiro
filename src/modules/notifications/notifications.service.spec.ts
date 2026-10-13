@@ -63,3 +63,16 @@ describe('NotificationsService.dispatchCharges - fila indisponível', () => {
     expect(r[0].channelsQueued).toEqual([Channel.WHATSAPP]);
   });
 });
+
+describe('NotificationsService.reenviarParadasNaFila', () => {
+  it('envia direto as notificações paradas na fila há mais de 10 minutos', async () => {
+    const prisma: any = { notificationLog: { findMany: jest.fn().mockResolvedValue([{ id: 'a' }, { id: 'b' }]) } };
+    const processor: any = { enviarNotificacao: jest.fn().mockRejectedValueOnce(new Error('falhou')).mockResolvedValue(undefined) };
+    const service = new NotificationsService(prisma, {} as any, processor);
+
+    await service.reenviarParadasNaFila();
+
+    expect(prisma.notificationLog.findMany.mock.calls[0][0].where.status).toBe('QUEUED');
+    expect(processor.enviarNotificacao).toHaveBeenCalledTimes(2); // uma falha não interrompe as demais
+  });
+});

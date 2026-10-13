@@ -53,10 +53,16 @@ export class NotificationsProcessor extends WorkerHost {
       return;
     }
 
-    await this.prisma.notificationLog.update({
-      where: { id: log.id },
+    // "Reserva" o envio de forma atômica: se outro processo (fila ou a rotina
+    // que reenvia o que ficou parado) já pegou ou já enviou, não envia de novo.
+    const reservado = await this.prisma.notificationLog.updateMany({
+      where: { id: log.id, status: { in: ['QUEUED', 'FAILED'] } },
       data: { status: 'SENDING', attempt },
     });
+    if (!reservado.count) {
+      this.logger.warn(`Notificação ${log.id} já está em envio/enviada (${log.status}) - ignorando duplicata.`);
+      return;
+    }
 
     try {
       const template = await this.prisma.messageTemplate.findUnique({

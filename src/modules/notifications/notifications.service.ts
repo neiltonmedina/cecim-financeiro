@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { Channel, Client, TemplateType } from '@prisma/client';
@@ -21,6 +22,25 @@ export class NotificationsService {
     @InjectQueue(NOTIFICATIONS_QUEUE) private readonly queue: Queue,
     private readonly processor: NotificationsProcessor,
   ) {}
+
+  /**
+   * A cada 10 min, envia direto as notificações que ficaram paradas na fila
+   * (QUEUED há mais de 10 min) - acontece quando o Redis aceita o job mas o
+   * worker não consegue processar (ex: cota do Upstash esgotada).
+   */
+  @Cron('*/10 * * * *')
+  async reenviarParadasNaFila() {
+    const paradas = await this.prisma.notificationLog.findMany({
+      where: { status: 'QUEUED', queuedAt: { lt: new Date(Date.now() - 10 * 60 * 1000) } },
+      select: { id: true },
+      take: 50,
+    });
+    if (!paradas.length) return;
+    this.logger.warn(`${paradas.length} notificação(ões) parada(s) na fila - enviando direto.`);
+    for (const { id } of paradas) {
+      await this.processor.enviarNotificacao(id).catch(() => undefined); // falha fica registrada no log
+    }
+  }
 
   /**
    * Enfileira o envio; se a fila (Redis) estiver fora do ar ou sem cota, envia

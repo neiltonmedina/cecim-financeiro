@@ -1414,8 +1414,22 @@ async function openConversation(id) {
         ${conv.humanRequested ? ' <span class="human-flag">⚠ aguardando humano</span>' : ''}
         ${conv.paused ? ' <span class="human-flag">⏸ pausada manualmente</span>' : ''}
       </p><hr/>`;
+    const envios = conv.charge?.notifications ?? [];
     if (!conv.messages.length) {
-      html += '<div class="empty">Nenhuma mensagem trocada ainda.</div>';
+      const ultimo = envios[0];
+      const SITUACAO = {
+        QUEUED: ['⏳', 'Na fila de envio desde ' + (ultimo ? fmtDateTime(ultimo.queuedAt) : '') + '. Se passar de 10 minutos, o sistema reenvia sozinho.', 'var(--yellow)'],
+        SENDING: ['⏳', 'Enviando agora...', 'var(--yellow)'],
+        FAILED: ['⚠️', 'O WhatsApp recusou o envio: ' + (ultimo?.errorMessage || 'motivo não informado') + '. Confira o telefone do cliente e dispare de novo.', 'var(--red)'],
+        SENT: ['✓', 'Enviada, mas ainda não registrada na conversa.', 'var(--green)'],
+      };
+      const [ico, texto, cor] = ultimo ? (SITUACAO[ultimo.status] ?? ['•', ultimo.status, 'var(--muted)'])
+        : ['•', 'Nenhum envio registrado para esta cobrança.', 'var(--muted)'];
+      html += `<div class="empty">Nenhuma mensagem trocada ainda.</div>
+        <div style="margin-top:-12px; padding:10px 12px; border-radius:10px; background:#f6f7fb; font-size:13px; color:${cor};">
+          <strong>${ico} Envio da cobrança:</strong> ${texto}
+          ${ultimo ? `<div style="color:var(--muted); font-size:12px; margin-top:4px;">Destino: ${ultimo.destination} · tentativa ${ultimo.attempt}</div>` : ''}
+        </div>`;
     } else {
       for (const m of conv.messages) {
         html += `<div class="msg ${m.direction}">
