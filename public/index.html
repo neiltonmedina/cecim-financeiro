@@ -1334,7 +1334,8 @@ async function loadCharges(origem = chargesOrigem) {
         <td>${c.description}</td>
         <td>${fmtMoney(c.amountCents)}</td>
         <td>${vencimentoCell}</td>
-        <td style="white-space:nowrap;"><span class="badge ${c.status}">${c.status}</span>${iconeEnvio(c)}</td>
+        <td style="white-space:nowrap;"><span class="badge ${c.status}">${c.status}</span>${iconeEnvio(c)}${c.notifications?.[0]?.status === 'FAILED'
+          ? `<div style="font-size:11.5px; color:var(--red); white-space:normal; max-width:220px; margin-top:4px; cursor:pointer;" onclick="mostrarErroEnvio('${c.id}')">${explicarErroEnvio(c.notifications[0].errorMessage).split(':')[0].split('.')[0]}</div>` : ''}</td>
       </tr>`;
     }
     html += '</tbody></table>';
@@ -1375,6 +1376,45 @@ async function gerarBoletoCobranca(id, btn) {
 
 let ultimosEnvios = {};
 
+/**
+ * Traduz o erro técnico do WhatsApp/Meta para o que aconteceu e o que fazer.
+ * Códigos: https://developers.facebook.com/docs/whatsapp/cloud-api/support/error-codes
+ */
+const ERROS_WHATSAPP = {
+  131008: 'Cobrança sem boleto (campo da linha digitável/Pix foi vazio na mensagem). Use "Gerar boleto" e dispare de novo.',
+  132000: 'A mensagem tem campos a mais ou a menos que o modelo aprovado na Meta. Avise o suporte do sistema.',
+  132012: 'Algum campo da mensagem está em formato inválido para o modelo aprovado. Avise o suporte do sistema.',
+  131009: 'Algum dado da mensagem é inválido - geralmente o telefone. Confira o número (DDD + número) no botão Editar.',
+  100: 'Dado inválido no envio - geralmente o telefone. Confira o número (DDD + número) no botão Editar.',
+  131026: 'Telefone sem WhatsApp, número errado ou o cliente não aceita mensagens. Confira o número no botão Editar.',
+  131030: 'Número não autorizado: a conta do WhatsApp ainda está em modo de teste na Meta.',
+  131047: 'Passou a janela de 24h desde a última resposta do cliente: só é possível enviar o modelo aprovado.',
+  131049: 'A Meta segurou a entrega para não mandar mensagens demais a este cliente. Tente de novo mais tarde.',
+  131050: 'O cliente bloqueou mensagens desta empresa no WhatsApp.',
+  131048: 'Envio limitado pela Meta (muitas mensagens marcadas como spam). Aguarde antes de tentar de novo.',
+  131056: 'Muitas mensagens para o mesmo número em pouco tempo. Aguarde alguns minutos e tente de novo.',
+  130429: 'Limite de envios da conta atingido. Aguarde alguns minutos e tente de novo.',
+  131042: 'Problema de pagamento na conta do WhatsApp Business (Meta). Verifique a forma de pagamento.',
+  131031: 'A conta do WhatsApp Business foi bloqueada/restrita pela Meta.',
+  368: 'A conta do WhatsApp Business foi restrita pela Meta por violação de política.',
+  132001: 'O modelo de mensagem não existe ou não está aprovado na Meta.',
+  132015: 'O modelo de mensagem foi pausado pela Meta (baixa qualidade).',
+  132016: 'O modelo de mensagem foi desativado pela Meta.',
+  133010: 'O número de envio da empresa não está registrado no WhatsApp.',
+  190: 'O token de acesso do WhatsApp expirou ou é inválido. É preciso gerar um novo no painel da Meta.',
+};
+function explicarErroEnvio(msg) {
+  const texto = String(msg || '');
+  const codigo = (texto.match(/#(\d{2,6})/) || [])[1];
+  if (codigo && ERROS_WHATSAPP[codigo]) return ERROS_WHATSAPP[codigo];
+  if (/sem boleto/i.test(texto)) return 'Cobrança sem boleto (linha digitável/Pix vazios). Use "Gerar boleto" e dispare de novo.';
+  if (/template ativo não encontrado/i.test(texto)) return 'Modelo de mensagem não cadastrado/ativo no painel (aba Modelos de mensagem).';
+  if (/fetch failed|timeout|ECONN|ETIMEDOUT|socket/i.test(texto)) return 'Sem conexão com o WhatsApp no momento. Dispare de novo em alguns minutos.';
+  if (/token|OAuth/i.test(texto)) return ERROS_WHATSAPP[190];
+  if (/phone|number|recipient/i.test(texto)) return 'Problema com o telefone do cliente. Confira o número (DDD + número) no botão Editar.';
+  return 'Erro não identificado - veja o detalhe técnico abaixo e, se continuar, avise o suporte do sistema.';
+}
+
 /** Ícone ao lado do status com a situação do último envio de WhatsApp (clicável). */
 function iconeEnvio(c) {
   const n = c.notifications?.[0];
@@ -1389,9 +1429,10 @@ function mostrarErroEnvio(chargeId) {
   const { cliente, envio: n } = ultimosEnvios[chargeId] ?? {};
   if (!n) return;
   if (n.status === 'FAILED') {
-    alert(`⚠️ Cobrança NÃO enviada para ${cliente}\n\nMotivo: ${n.errorMessage || 'não informado pelo WhatsApp'}\n\n` +
-      `Número usado: ${n.destination}\nTentativa(s): ${n.attempt}\nEm: ${fmtDateTime(n.failedAt || n.queuedAt)}\n\n` +
-      `Corrija o problema (ex.: botão Editar no telefone ou Gerar boleto) e dispare de novo.`);
+    alert(`⚠️ Cobrança NÃO enviada para ${cliente}\n\n` +
+      `O que aconteceu: ${explicarErroEnvio(n.errorMessage)}\n\n` +
+      `Número usado: ${n.destination}\nTentativa(s): ${n.attempt} · ${fmtDateTime(n.failedAt || n.queuedAt)}\n\n` +
+      `Detalhe técnico: ${n.errorMessage || 'não informado pelo WhatsApp'}`);
   } else {
     alert(`⏳ Cobrança de ${cliente} na fila de envio desde ${fmtDateTime(n.queuedAt)}.\nSe passar de 10 minutos, o sistema reenvia sozinho.`);
   }
@@ -1480,7 +1521,8 @@ async function openConversation(id) {
       const SITUACAO = {
         QUEUED: ['⏳', 'Na fila de envio desde ' + (ultimo ? fmtDateTime(ultimo.queuedAt) : '') + '. Se passar de 10 minutos, o sistema reenvia sozinho.', 'var(--yellow)'],
         SENDING: ['⏳', 'Enviando agora...', 'var(--yellow)'],
-        FAILED: ['⚠️', 'O WhatsApp recusou o envio: ' + (ultimo?.errorMessage || 'motivo não informado') + '. Confira o telefone do cliente e dispare de novo.', 'var(--red)'],
+        FAILED: ['⚠️', 'Não enviada. ' + explicarErroEnvio(ultimo?.errorMessage) +
+          '<div style="color:var(--muted); font-size:12px; margin-top:4px;">Detalhe técnico: ' + (ultimo?.errorMessage || 'não informado') + '</div>', 'var(--red)'],
         SENT: ['✓', 'Enviada, mas ainda não registrada na conversa.', 'var(--green)'],
       };
       const [ico, texto, cor] = ultimo ? (SITUACAO[ultimo.status] ?? ['•', ultimo.status, 'var(--muted)'])

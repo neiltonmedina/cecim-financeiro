@@ -61,7 +61,9 @@ export class WebhooksController {
       for (const change of entry.changes ?? []) {
         const statuses = change.value?.statuses ?? [];
         for (const status of statuses) {
-          this.applyWhatsAppStatus(status.id, status.status, status.errors?.[0]?.title).catch((err) => {
+          const erro = status.errors?.[0];
+          const erroTexto = erro ? `${erro.code ? `(#${erro.code}) ` : ''}${erro.title ?? ''}`.trim() : undefined;
+          this.applyWhatsAppStatus(status.id, status.status, erroTexto).catch((err) => {
             this.logger.error(`Erro ao atualizar status de WhatsApp: ${err.message}`);
           });
         }
