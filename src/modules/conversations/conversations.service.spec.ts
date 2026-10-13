@@ -112,3 +112,30 @@ describe('ConversationsService - opção 2 com boleto vencido', () => {
     expect(whatsapp.send.mock.calls[1][0].body).toBe('LINHA-NOVA');
   });
 });
+
+describe('ConversationsService.ensureConversationForCharge - intervalo da régua', () => {
+  function setup(existing: any) {
+    const prisma: any = {
+      conversation: {
+        findFirst: jest.fn().mockResolvedValue(existing),
+        update: jest.fn().mockImplementation(({ data }) => Promise.resolve({ ...existing, ...data })),
+        create: jest.fn().mockImplementation(({ data }) => Promise.resolve(data)),
+      },
+    };
+    return { prisma, service: new ConversationsService(prisma, {} as any, {} as any, {} as any, {} as any, {} as any) };
+  }
+
+  it('reenvio sem intervalo mantém o intervalo que a régua já tinha', async () => {
+    const { service, prisma } = setup({ id: 'c', intervalDays: 3 });
+    const r = await service.ensureConversationForCharge('cli', 'ch');
+    expect(prisma.conversation.update).not.toHaveBeenCalled();
+    expect(r.intervalDays).toBe(3);
+  });
+
+  it('intervalo informado substitui o atual; conversa nova sem intervalo usa 5 dias', async () => {
+    const a = setup({ id: 'c', intervalDays: 3 });
+    expect((await a.service.ensureConversationForCharge('cli', 'ch', 7)).intervalDays).toBe(7);
+    const b = setup(null);
+    expect((await b.service.ensureConversationForCharge('cli', 'ch')).intervalDays).toBe(5);
+  });
+});

@@ -861,6 +861,13 @@ async function createClient() {
 
   const pendente = editando ? boletoPendente : null;
   if (pendente) {
+    const intervalo = Number(document.getElementById('boleto-intervalo')?.value);
+    if (!intervalo || intervalo < 1) {
+      msgEl.style.color = 'var(--red)';
+      msgEl.textContent = 'Informe o intervalo entre contatos (em dias) no quadro amarelo.';
+      return;
+    }
+    pendente.intervalDays = intervalo;
     // Veio do "Gerar boleto": com o cadastro conferido, gera o boleto e envia a cobrança.
     msgEl.style.color = '';
     msgEl.textContent = 'Cadastro salvo. Gerando o boleto no Inter...';
@@ -1401,7 +1408,7 @@ async function loadCharges(origem = chargesOrigem) {
 }
 
 /** Corrige o WhatsApp do cliente direto na lista de cobranças. */
-async function editarTelefone(clientId, atual, nome, reenviarChargeId, intervalDays = 5) {
+async function editarTelefone(clientId, atual, nome, reenviarChargeId, intervalDays) {
   const digitado = prompt(`WhatsApp de ${nome} (DDD + número, ex: 94992453959):`, (atual || '').replace(/^\+55/, ''));
   if (digitado === null) return;
   const tel = telefoneDaPlanilha(digitado);
@@ -1422,20 +1429,29 @@ let boletoPendente = null; // { chargeId, intervalDays, voltarPara } enquanto o 
  * "Gerar boleto": leva para o cadastro do cliente (já preenchido) para conferir
  * os dados que o Inter exige; ao salvar, gera o boleto e envia a cobrança.
  */
-async function abrirCadastroParaGerarBoleto(chargeId, clientId, intervalDays = 5) {
+async function abrirCadastroParaGerarBoleto(chargeId, clientId) {
   const voltarPara = abaAtual === 'clients' ? 'charges' : abaAtual;
   closeModal();
   switchTab('clients');
   await editarCliente(clientId);
-  boletoPendente = { chargeId, intervalDays, voltarPara };
+  // Intervalo atual da régua desse cliente (se já houve envio), senão 5 dias.
+  const conversas = await api('/conversations').catch(() => []);
+  const conv = conversas.find((c) => c.chargeId === chargeId && c.stage !== 'ENCERRADA');
+  const intervaloAtual = conv?.intervalDays ?? 5;
+  boletoPendente = { chargeId, voltarPara };
   const aviso = document.getElementById('client-form-aviso');
   aviso.innerHTML = '<strong>Confira os dados do cliente para gerar o boleto.</strong> O Inter exige CPF/CNPJ, CEP real, rua, bairro, cidade e UF (sigla, ex: PA). ' +
-    'Ao salvar, o boleto é gerado no Inter e a cobrança é enviada pelo WhatsApp.';
+    'Ao salvar, o boleto é gerado no Inter e a cobrança é enviada pelo WhatsApp.' +
+    `<div style="margin-top:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+      <label for="boleto-intervalo" style="font-weight:600;">Intervalo entre contatos da régua (dias):</label>
+      <input id="boleto-intervalo" type="number" min="1" step="1" value="${intervaloAtual}" style="width:80px;" />
+      <span style="font-size:12px;">${conv ? 'valor atual da régua deste cliente' : 'primeiro envio - padrão 5 dias'}</span>
+    </div>`;
   aviso.style.display = 'block';
   document.getElementById('client-submit').textContent = 'Salvar, gerar boleto e enviar';
 }
 
-async function gerarBoletoCobranca(id, btn, reenviar = false, intervalDays = 5, clientId = null) {
+async function gerarBoletoCobranca(id, btn, reenviar = false, intervalDays, clientId = null) {
   const pergunta = reenviar
     ? 'Gerar o boleto no Inter e enviar a cobrança pelo WhatsApp agora? Se o vencimento já passou, o boleto sai com vencimento hoje.'
     : 'Gerar o boleto desta cobrança no Inter agora? Se o vencimento já passou, o boleto sai com vencimento hoje.';
@@ -1461,12 +1477,13 @@ async function gerarBoletoCobranca(id, btn, reenviar = false, intervalDays = 5, 
 }
 
 /** Dispara de novo uma única cobrança (depois de corrigir o problema). */
-async function redispararCobranca(chargeId, semPerguntar, intervalDays = 5) {
+async function redispararCobranca(chargeId, semPerguntar, intervalDays) {
   if (!semPerguntar && !confirm('Enviar a cobrança pelo WhatsApp de novo agora?')) return;
   try {
     const r = await api('/charges/dispatch', {
       method: 'POST',
-      body: JSON.stringify({ chargeIds: [chargeId], channels: ['WHATSAPP'], intervalDays, confirmado: true }),
+      // intervalDays ausente: o servidor mantém o intervalo que a régua desse cliente já tinha.
+      body: JSON.stringify({ chargeIds: [chargeId], channels: ['WHATSAPP'], ...(intervalDays ? { intervalDays } : {}), confirmado: true }),
     });
     const res = r[0];
     alert(res?.channelsQueued?.length ? 'Cobrança enviada para a fila do WhatsApp. Em instantes ela chega ao cliente.'
@@ -1493,9 +1510,10 @@ function solucaoDoErro(msg, temBoleto) {
 function botoesSolucao({ chargeId, clientId, telefone, nome, temBoleto, erro, intervalDays }) {
   const nomeSeguro = String(nome || '').replaceAll("'", '');
   const tipo = solucaoDoErro(erro, temBoleto);
-  const btnEditar = `<button onclick="closeModal(); editarTelefone('${clientId}', '${telefone || ''}', '${nomeSeguro}', '${chargeId}', ${intervalDays || 5})">📞 Corrigir telefone e reenviar</button>`;
-  const btnBoleto = `<button onclick="abrirCadastroParaGerarBoleto('${chargeId}', '${clientId}', ${intervalDays || 5})">🧾 Conferir cadastro e gerar boleto</button>`;
-  const btnReenviar = `<button class="secondary" onclick="closeModal(); redispararCobranca('${chargeId}', false, ${intervalDays || 5})">↻ Disparar de novo</button>`;
+  const iv = intervalDays || 'undefined';
+  const btnEditar = `<button onclick="closeModal(); editarTelefone('${clientId}', '${telefone || ''}', '${nomeSeguro}', '${chargeId}', ${iv})">📞 Corrigir telefone e reenviar</button>`;
+  const btnBoleto = `<button onclick="abrirCadastroParaGerarBoleto('${chargeId}', '${clientId}')">🧾 Conferir cadastro e gerar boleto</button>`;
+  const btnReenviar = `<button class="secondary" onclick="closeModal(); redispararCobranca('${chargeId}', false, ${iv})">↻ Disparar de novo</button>`;
   if (tipo === 'boleto') return btnBoleto;
   if (tipo === 'telefone') return btnEditar + btnReenviar;
   if (tipo === 'suporte') return '<span style="font-size:12.5px; color:var(--muted); align-self:center;">Problema na conta/modelo do WhatsApp - não é do cliente. Avise o suporte do sistema.</span>';

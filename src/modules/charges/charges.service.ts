@@ -213,7 +213,8 @@ export class ChargesService {
     }
 
     const templateType = dto.templateType ?? TemplateType.COBRANCA_PENDENTE;
-    const intervalDays = dto.intervalDays ?? 5;
+    // Sem intervalo informado (reenvio rápido), a conversa mantém o que já tinha (ou 5 se for nova).
+    const intervalDays = dto.intervalDays;
 
     // Abre (ou atualiza) a conversa do agente ANTES de enfileirar o envio: o
     // processamento da fila marca nela a data do primeiro contato, que é a
