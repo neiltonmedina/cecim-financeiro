@@ -6,6 +6,32 @@ import { InterBoletoProvider } from './inter-boleto.provider';
 
 const DIA_MS = 24 * 60 * 60 * 1000;
 
+const CAMPOS_INTER: Record<string, string> = {
+  uf: 'UF (estado)', cep: 'CEP', cidade: 'cidade', endereco: 'rua/endereço', bairro: 'bairro', numero: 'número',
+  cpfCnpj: 'CPF/CNPJ', nome: 'nome', email: 'e-mail', dataVencimento: 'vencimento', valorNominal: 'valor',
+};
+
+/**
+ * Traduz a recusa do Inter ({ title, detail, violacoes: [{ razao, propriedade }] })
+ * para português dizendo qual dado corrigir. Ex: "pagador.uf: O valor não pode ser nulo"
+ * vira "Dado do cliente inválido para o Inter - UF (estado): O valor não pode ser nulo".
+ */
+export function traduzirErroInter(error: any): string {
+  const data = error?.response?.data;
+  if (!data) return error?.message ?? String(error);
+  const violacoes: any[] = Array.isArray(data.violacoes) ? data.violacoes : [];
+  if (violacoes.length) {
+    const itens = violacoes.map((v) => {
+      const prop = String(v.propriedade ?? '').split('.').pop() ?? '';
+      return `${CAMPOS_INTER[prop] ?? prop}: ${v.razao ?? 'inválido'}`;
+    });
+    const doCliente = violacoes.some((v) => String(v.propriedade ?? '').includes('pagador'));
+    return `${doCliente ? 'Dado do cliente inválido para o Inter' : 'Dado inválido para o Inter'} - ${itens.join('; ')}.` +
+      (doCliente ? ' Corrija no cadastro do cliente (Clientes > Editar).' : '');
+  }
+  return [data.title, data.detail].filter(Boolean).join(' ') || JSON.stringify(data);
+}
+
 /** Situações do Inter que ainda podem ser cobradas. */
 const SITUACOES_EM_ABERTO = ['A_RECEBER', 'ATRASADO'];
 
@@ -125,8 +151,11 @@ export class BoletosService {
         },
       });
     } catch (error: any) {
-      const message = error.response?.data ? JSON.stringify(error.response.data) : error.message;
-      this.logger.error(`Falha ao gerar boleto no Inter para cobrança ${charge.id}: ${message}`);
+      const message = traduzirErroInter(error);
+      this.logger.error(
+        `Falha ao gerar boleto no Inter para cobrança ${charge.id}: ${message}` +
+          (error.response?.data ? ` | resposta do Inter: ${JSON.stringify(error.response.data)}` : ''),
+      );
       return this.prisma.charge.update({
         where: { id: charge.id },
         data: { boletoErro: message?.toString().slice(0, 500) },

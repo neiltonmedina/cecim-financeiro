@@ -9,6 +9,22 @@ interface InterTokenResponse {
   expires_in: number;
 }
 
+const UFS: Record<string, string> = {
+  ACRE: 'AC', ALAGOAS: 'AL', AMAPA: 'AP', AMAZONAS: 'AM', BAHIA: 'BA', CEARA: 'CE', 'DISTRITO FEDERAL': 'DF',
+  'ESPIRITO SANTO': 'ES', GOIAS: 'GO', MARANHAO: 'MA', 'MATO GROSSO': 'MT', 'MATO GROSSO DO SUL': 'MS',
+  'MINAS GERAIS': 'MG', PARA: 'PA', PARAIBA: 'PB', PARANA: 'PR', PERNAMBUCO: 'PE', PIAUI: 'PI',
+  'RIO DE JANEIRO': 'RJ', 'RIO GRANDE DO NORTE': 'RN', 'RIO GRANDE DO SUL': 'RS', RONDONIA: 'RO', RORAIMA: 'RR',
+  'SANTA CATARINA': 'SC', 'SAO PAULO': 'SP', SERGIPE: 'SE', TOCANTINS: 'TO',
+};
+const SIGLAS = new Set(Object.values(UFS));
+
+/** Converte "Pará", "pa", " PA " etc. para a sigla que o Inter exige; undefined se não reconhecer. */
+export function normalizarUf(valor?: string | null): string | undefined {
+  const t = (valor ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toUpperCase();
+  if (SIGLAS.has(t)) return t;
+  return UFS[t];
+}
+
 export interface InterBoletoResult {
   codigoSolicitacao: string;
   pdfBase64: string;
@@ -108,6 +124,10 @@ export class InterBoletoProvider {
         'Cliente sem endereço completo cadastrado (cep, endereco, bairro, cidade, uf) - obrigatório para gerar boleto no Inter',
       );
     }
+    const uf = normalizarUf(client.uf);
+    if (!uf) {
+      throw new Error(`UF (estado) do cliente inválida: "${client.uf}" - use a sigla do estado, ex: PA. Corrija no cadastro do cliente.`);
+    }
     const tipoPessoa = documento.length > 11 ? 'JURIDICA' : 'FISICA';
 
     const payload: Record<string, any> = {
@@ -123,7 +143,7 @@ export class InterBoletoProvider {
         endereco: client.endereco,
         bairro: client.bairro,
         cidade: client.cidade,
-        uf: client.uf,
+        uf,
         cep,
         numero: client.numero ?? 'SN',
       },

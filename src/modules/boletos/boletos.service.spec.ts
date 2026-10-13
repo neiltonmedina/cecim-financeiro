@@ -114,3 +114,22 @@ describe('BoletosService - importar boletos já gerados no Inter', () => {
     expect(lista[0]).toMatchObject({ valorCents: 15050, jaNoPainel: false, telefone: '+5594992453959' });
   });
 });
+
+describe('Dados do cliente para o Inter', () => {
+  const { normalizarUf } = require('./inter-boleto.provider');
+  const { traduzirErroInter } = require('./boletos.service');
+
+  it('converte o estado para a sigla que o Inter exige', () => {
+    expect(normalizarUf('Pará')).toBe('PA');
+    expect(normalizarUf(' pa ')).toBe('PA');
+    expect(normalizarUf('São Paulo')).toBe('SP');
+    expect(normalizarUf('XX')).toBeUndefined();
+  });
+
+  it('traduz a recusa do Inter dizendo qual dado do cliente corrigir', () => {
+    const erro = { response: { data: { title: 'Dados inválidos.', violacoes: [{ razao: 'O valor não pode ser nulo', propriedade: 'incluirCobrancaAsync.body.pagador.uf' }] } } };
+    expect(traduzirErroInter(erro)).toBe(
+      'Dado do cliente inválido para o Inter - UF (estado): O valor não pode ser nulo. Corrija no cadastro do cliente (Clientes > Editar).',
+    );
+  });
+});

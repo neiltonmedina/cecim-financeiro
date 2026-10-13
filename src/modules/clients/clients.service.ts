@@ -1,4 +1,5 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { normalizarUf } from '../boletos/inter-boleto.provider';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateClientDto } from './dto/create-client.dto';
 import { UpdateClientDto } from './dto/update-client.dto';
@@ -9,7 +10,7 @@ export class ClientsService {
 
   async create(dto: CreateClientDto) {
     await this.checkDuplicate(dto.document, dto.phoneE164);
-    return this.prisma.client.create({ data: dto });
+    return this.prisma.client.create({ data: { ...dto, uf: dto.uf ? (normalizarUf(dto.uf) ?? dto.uf) : dto.uf } });
   }
 
   /**
@@ -59,6 +60,8 @@ export class ClientsService {
 
   async update(id: string, dto: UpdateClientDto) {
     await this.findOne(id);
+    // Grava a UF como sigla (o Inter recusa "Pará", "pa" etc.).
+    if (dto.uf) dto.uf = normalizarUf(dto.uf) ?? dto.uf;
     if (dto.document || dto.phoneE164) {
       await this.checkDuplicate(dto.document, dto.phoneE164, id);
     }
