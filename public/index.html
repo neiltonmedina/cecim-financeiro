@@ -1334,11 +1334,12 @@ async function loadCharges(origem = chargesOrigem) {
         <td>${c.description}</td>
         <td>${fmtMoney(c.amountCents)}</td>
         <td>${vencimentoCell}</td>
-        <td><span class="badge ${c.status}">${c.status}</span></td>
+        <td style="white-space:nowrap;"><span class="badge ${c.status}">${c.status}</span>${iconeEnvio(c)}</td>
       </tr>`;
     }
     html += '</tbody></table>';
     el.innerHTML = html;
+    ultimosEnvios = Object.fromEntries(charges.map((c) => [c.id, { cliente: c.client?.name, envio: c.notifications?.[0] }]));
   } catch (e) {
     el.innerHTML = '<div class="empty">' + e.message + '</div>';
   }
@@ -1369,6 +1370,30 @@ async function gerarBoletoCobranca(id, btn) {
     alert('Não foi possível gerar o boleto: ' + e.message);
     btn.disabled = false;
     btn.textContent = 'Gerar boleto';
+  }
+}
+
+let ultimosEnvios = {};
+
+/** Ícone ao lado do status com a situação do último envio de WhatsApp (clicável). */
+function iconeEnvio(c) {
+  const n = c.notifications?.[0];
+  if (!n) return '';
+  const estilo = 'border:none; background:none; padding:0 0 0 6px; font-size:15px; cursor:pointer; vertical-align:middle;';
+  if (n.status === 'FAILED') return `<button style="${estilo}" title="Não enviado - clique para ver o motivo" onclick="mostrarErroEnvio('${c.id}')">⚠️</button>`;
+  if (n.status === 'QUEUED' || n.status === 'SENDING') return `<button style="${estilo}" title="Na fila de envio" onclick="mostrarErroEnvio('${c.id}')">⏳</button>`;
+  return '';
+}
+
+function mostrarErroEnvio(chargeId) {
+  const { cliente, envio: n } = ultimosEnvios[chargeId] ?? {};
+  if (!n) return;
+  if (n.status === 'FAILED') {
+    alert(`⚠️ Cobrança NÃO enviada para ${cliente}\n\nMotivo: ${n.errorMessage || 'não informado pelo WhatsApp'}\n\n` +
+      `Número usado: ${n.destination}\nTentativa(s): ${n.attempt}\nEm: ${fmtDateTime(n.failedAt || n.queuedAt)}\n\n` +
+      `Corrija o problema (ex.: botão Editar no telefone ou Gerar boleto) e dispare de novo.`);
+  } else {
+    alert(`⏳ Cobrança de ${cliente} na fila de envio desde ${fmtDateTime(n.queuedAt)}.\nSe passar de 10 minutos, o sistema reenvia sozinho.`);
   }
 }
 
