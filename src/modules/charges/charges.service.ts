@@ -226,7 +226,8 @@ export class ChargesService {
       await Promise.all(charges.map((c) => this.boletosService.garantirLinhaDigitavel(c)));
     }
 
-    const templateType = dto.templateType ?? TemplateType.COBRANCA_PENDENTE;
+    // Sem modelo explícito, o envio escolhe por cobrança (no prazo x vencido).
+    const templateType = dto.templateType;
     // Sem intervalo informado (reenvio rápido), a conversa mantém o que já tinha (ou 5 se for nova).
     const intervalDays = dto.intervalDays;
 

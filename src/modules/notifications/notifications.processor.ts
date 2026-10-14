@@ -157,6 +157,8 @@ export class NotificationsProcessor extends WorkerHost {
     switch (templateType) {
       case 'COBRANCA_PENDENTE':
         return [context.cliente, context.linhaDigitavel || context.pix];
+      case 'BOLETO_DISPONIVEL':
+        return [context.cliente, context.vencimentoBoleto, context.valor, context.linhaDigitavel || context.pix];
       case 'LEMBRETE_VENCIMENTO':
         return [context.cliente, context.valor];
       case 'COBRANCA_VENCIDA':

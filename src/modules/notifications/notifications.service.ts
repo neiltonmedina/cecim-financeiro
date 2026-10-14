@@ -5,12 +5,22 @@ import { Queue } from 'bullmq';
 import { Channel, Client, TemplateType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NOTIFICATIONS_QUEUE } from './notifications.constants';
+import { hojeSaoPaulo } from '../boletos/boletos.service';
+
+/** Boleto ainda não vencido (vencimento registrado no Inter hoje ou no futuro). */
+export function boletoNoPrazo(charge: { dueDate: Date; boletoDataVencimento?: Date | null }, hojeISO: string) {
+  return (charge.boletoDataVencimento ?? charge.dueDate).toISOString().slice(0, 10) >= hojeISO;
+}
 import { NotificationsProcessor } from './notifications.processor';
 
 export interface DispatchOptions {
   /** Canais a utilizar. Se omitido, usa todos os canais habilitados (opt-in) do cliente. */
   channels?: Channel[];
-  templateType: TemplateType;
+  /**
+   * Modelo da mensagem. Se omitido, escolhe por cobrança: boleto ainda no prazo
+   * -> BOLETO_DISPONIVEL (se o modelo estiver ativo/aprovado), vencido -> COBRANCA_PENDENTE.
+   */
+  templateType?: TemplateType;
 }
 
 @Injectable()
@@ -97,6 +107,12 @@ export class NotificationsService {
     });
 
     const results: Array<{ chargeId: string; clientId: string; channelsQueued: Channel[]; skipped: string[] }> = [];
+    const modeloNoPrazoAtivo = options.templateType
+      ? false
+      : !!(await this.prisma.messageTemplate.findFirst({
+          where: { channel: Channel.WHATSAPP, type: TemplateType.BOLETO_DISPONIVEL, active: true },
+        }));
+    const hoje = hojeSaoPaulo();
 
     for (const charge of charges) {
       if (!charge.client.active) {
@@ -141,7 +157,11 @@ export class NotificationsService {
             chargeId: charge.id,
             channel,
             destination,
-            templateType: options.templateType,
+            templateType:
+              options.templateType ??
+              (channel === Channel.WHATSAPP && modeloNoPrazoAtivo && boletoNoPrazo(charge, hoje)
+                ? TemplateType.BOLETO_DISPONIVEL
+                : TemplateType.COBRANCA_PENDENTE),
             status: 'QUEUED',
           },
         });

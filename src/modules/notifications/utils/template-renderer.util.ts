@@ -5,6 +5,7 @@ export interface TemplateContext {
   cliente: string;
   valor: string;
   vencimento: string;
+  vencimentoBoleto: string;
   linkPagamento: string;
   descricao: string;
   diasAtraso: number;
@@ -30,6 +31,8 @@ export function buildTemplateContext(client: Client, charge: Charge, appUrl: str
     cliente: client.name,
     valor: formatCurrencyBRL(charge.amountCents),
     vencimento: formatDateBR(charge.dueDate),
+    // Vencimento registrado no boleto do Inter (a segunda via muda essa data).
+    vencimentoBoleto: formatDateBR(charge.boletoDataVencimento ?? charge.dueDate),
     linkPagamento: charge.paymentLink ?? `${appUrl}/pagamentos/${charge.id}`,
     descricao: charge.description,
     diasAtraso: calcularDiasAtraso(charge.dueDate),

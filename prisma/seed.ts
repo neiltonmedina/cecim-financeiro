@@ -10,6 +10,7 @@ const DEFAULT_TEMPLATES: Array<{
   subject?: string;
   body: string;
   providerTemplateName?: string;
+  active?: boolean;
 }> = [
   {
     channel: Channel.WHATSAPP,
@@ -22,6 +23,18 @@ const DEFAULT_TEMPLATES: Array<{
       'reenviar o boleto; ajudar com a forma de pagamento. Segue a linha digitável do seu boleto, ' +
       'com valor atualizado para pagamento: {{linhaDigitavel}} Responda 1 para receber o código Pix, ou 2 para o boleto atualizado.',
     providerTemplateName: 'cobranca_cecim',
+  },
+  {
+    channel: Channel.WHATSAPP,
+    type: TemplateType.BOLETO_DISPONIVEL,
+    name: 'WhatsApp - Boleto disponível (ainda não vencido)',
+    // Igual ao modelo boleto_disponivel_cecim enviado para aprovação da Meta pelo painel.
+    // Começa inativo: só passa a ser usado quando a Meta aprovar (o painel ativa ao verificar).
+    body:
+      'Olá {{cliente}}! Seu boleto com vencimento em {{vencimentoBoleto}} já está disponível, no valor de {{valor}}. ' +
+      'Linha digitável para pagamento: {{linhaDigitavel}} Responda 1 para receber o código Pix ou 2 para receber o boleto em PDF.',
+    providerTemplateName: 'boleto_disponivel_cecim',
+    active: false,
   },
   {
     channel: Channel.WHATSAPP,

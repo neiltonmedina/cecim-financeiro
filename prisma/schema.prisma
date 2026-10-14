@@ -111,6 +111,7 @@ model Charge {
 
 enum TemplateType {
   COBRANCA_PENDENTE
+  BOLETO_DISPONIVEL // boleto ainda não vencido: "Seu boleto com vencimento em ... já está disponível"
   LEMBRETE_VENCIMENTO
   COBRANCA_VENCIDA
   CONFIRMACAO_PAGAMENTO
