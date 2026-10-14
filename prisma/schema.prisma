@@ -128,6 +128,17 @@ model MessageTemplate {
   active    Boolean      @default(true)
   // nome do template pré-aprovado na Meta, obrigatório apenas para WHATSAPP fora da janela de 24h
   providerTemplateName String?
+  // Ordem das variáveis do modelo da Meta ({{1}}, {{2}}...) como chaves do contexto
+  // (cliente, vencimentoBoleto, valor, linhaDigitavel, diasAtraso, descricao).
+  // Vazio = modelos antigos, com parâmetros fixos no código.
+  providerParams String[] @default([])
+  // Versão nova enviada pelo painel para aprovação da Meta (só vira a oficial quando aprovada).
+  metaStatus        String? // PENDING | APPROVED | REJECTED
+  metaMotivo        String?
+  pendenteNome      String?
+  pendenteTexto     String?
+  pendenteParams    String[] @default([])
+  pendenteEnviadoEm DateTime?
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 

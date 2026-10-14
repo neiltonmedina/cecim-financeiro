@@ -28,12 +28,13 @@ const DEFAULT_TEMPLATES: Array<{
     channel: Channel.WHATSAPP,
     type: TemplateType.BOLETO_DISPONIVEL,
     name: 'WhatsApp - Boleto disponível (ainda não vencido)',
-    // Igual ao modelo boleto_disponivel_cecim enviado para aprovação da Meta pelo painel.
-    // Começa inativo: só passa a ser usado quando a Meta aprovar (o painel ativa ao verificar).
+    // Rascunho inicial - editado e enviado para aprovação da Meta pela aba "Modelos de
+    // mensagem". Começa inativo: só passa a ser usado quando a Meta aprovar.
     body:
-      'Olá {{cliente}}! Seu boleto com vencimento em {{vencimentoBoleto}} já está disponível, no valor de {{valor}}. ' +
-      'Linha digitável para pagamento: {{linhaDigitavel}} Responda 1 para receber o código Pix ou 2 para receber o boleto em PDF.',
-    providerTemplateName: 'boleto_disponivel_cecim',
+      'Olá, {{cliente}}! 😊\n\nSeu boleto da *CECIM Assessoria Contábil* já está disponível.\n\n' +
+      '📅 Vencimento: *{{vencimentoBoleto}}*\n💰 Valor: *{{valor}}*\n\n' +
+      'Para pagar, copie a linha digitável abaixo e cole no app do seu banco:\n{{linhaDigitavel}}\n\n' +
+      'Prefere pagar com Pix? Responda *1*. Para receber o boleto em PDF, responda *2*.\n\nAgradecemos a parceria!',
     active: false,
   },
   {
@@ -128,15 +129,21 @@ async function main() {
   for (const tpl of DEFAULT_TEMPLATES) {
     await prisma.messageTemplate.upsert({
       where: { channel_type: { channel: tpl.channel, type: tpl.type } },
-      update: {
-        name: tpl.name,
-        subject: tpl.subject,
-        body: tpl.body,
-        providerTemplateName: tpl.providerTemplateName,
-      },
+      // Modelos do WhatsApp são editados/aprovados pelo painel: o seed não sobrescreve
+      // o texto nem o modelo da Meta em uso (senão cada deploy desfaria a aprovação).
+      update:
+        tpl.channel === Channel.WHATSAPP
+          ? { name: tpl.name }
+          : { name: tpl.name, subject: tpl.subject, body: tpl.body, providerTemplateName: tpl.providerTemplateName },
       create: tpl,
     });
   }
+  // Rascunho do "boleto a vencer" ainda nunca enviado à Meta: mantém o texto inicial atualizado.
+  const rascunho = DEFAULT_TEMPLATES.find((t) => t.channel === Channel.WHATSAPP && t.type === TemplateType.BOLETO_DISPONIVEL)!;
+  await prisma.messageTemplate.updateMany({
+    where: { channel: Channel.WHATSAPP, type: TemplateType.BOLETO_DISPONIVEL, active: false, metaStatus: null, pendenteNome: null },
+    data: { body: rascunho.body, providerTemplateName: null },
+  });
   console.log(`${DEFAULT_TEMPLATES.length} templates padrão garantidos.`);
 
   const reminderRules = [

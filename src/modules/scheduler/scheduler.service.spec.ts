@@ -26,6 +26,7 @@ function setup(conversations: any[]) {
     conversationMessage: { create: jest.fn() },
     charge: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
     notificationLog: { findFirst: jest.fn().mockResolvedValue(null) },
+    messageTemplate: { findFirst: jest.fn().mockResolvedValue(null) },
   };
   const whatsapp: any = { send: jest.fn().mockResolvedValue({ providerMessageId: 'x' }) };
   const service = new SchedulerService(prisma, {} as any, whatsapp);
@@ -89,6 +90,24 @@ describe('SchedulerService - régua automática', () => {
     await service.runDailyReminders();
     expect(prisma.charge.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ status: { in: ['PENDENTE', 'ENVIADA'] } }) }),
+    );
+  });
+});
+
+describe('SchedulerService - modelo da régua (a vencer x vencido)', () => {
+  it('boleto ainda no prazo usa o modelo "a vencer" aprovado, com os campos na ordem dele', async () => {
+    const conv = makeConversation({
+      charge: { status: 'ENVIADA', dueDate: new Date(Date.now() + 5 * DIA), linhaDigitavel: '0779', pixCopiaECola: null, amountCents: 15000 },
+    });
+    const { service, prisma, whatsapp } = setup([conv]);
+    prisma.messageTemplate.findFirst.mockImplementation(({ where }: any) =>
+      Promise.resolve(where.type === 'BOLETO_DISPONIVEL' ? { providerTemplateName: 'boleto_a_vencer_cecim_1', providerParams: ['cliente', 'valor', 'linhaDigitavel'] } : null),
+    );
+
+    await service.runDailyReminders();
+
+    expect(whatsapp.send).toHaveBeenCalledWith(
+      expect.objectContaining({ providerTemplateName: 'boleto_a_vencer_cecim_1', templateParams: ['Cliente Teste', expect.stringMatching(/R\$\s150,00/), '0779'] }),
     );
   });
 });

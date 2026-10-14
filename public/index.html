@@ -180,6 +180,7 @@
 
   @media (max-width: 1000px) {
     .span-8, .span-4, .span-6 { grid-column: span 12; }
+    .modelo-grid { grid-template-columns: 1fr !important; }
   }
   @media (max-width: 860px) {
     #app.layout.visible { flex-direction: column; }
@@ -516,17 +517,15 @@
     </div>
 
     <div id="tab-messages" class="tab" style="display:none;">
-      <div class="card">
-        <p style="font-size:13px; color:var(--muted); margin-top:0;">
-          Aqui você edita o texto usado para SMS e E-mail (enviados como texto livre). Para o WhatsApp, o texto
-          exibido é só uma referência - a mensagem de verdade é a que está aprovada no WhatsApp Manager da Meta;
-          se quiser mudá-la, precisa editar por lá também. Use os placeholders entre chaves duplas
-          (ex: <code>{{cliente}}</code>, <code>{{valor}}</code>, <code>{{vencimento}}</code>, <code>{{diasAtraso}}</code>,
-          <code>{{linkPagamento}}</code>, <code>{{pix}}</code>, <code>{{descricao}}</code>) - eles são trocados
-          automaticamente pelos dados de cada cobrança.
-        </p>
-        <div id="messages-content" class="loading">Carregando...</div>
+      <div class="card" style="background:var(--accent-soft); border-color:#d6e0f7;">
+        <div style="font-size:13.5px; line-height:1.55;">
+          <strong>Como funciona:</strong> o WhatsApp só entrega mensagens de empresa com texto <strong>aprovado pela Meta</strong>.
+          Edite o texto abaixo, confira a prévia e clique em <strong>Enviar para aprovação da Meta</strong> - nada é enviado sem o seu clique.
+          Enquanto a Meta analisa (minutos a 24h), continua valendo a mensagem atual; quando aprovar, o painel passa a usar a nova sozinho.
+          Use os botões de campo para inserir dados de cada cliente.
+        </div>
       </div>
+      <div id="messages-content" class="loading">Carregando...</div>
     </div>
   </main>
   </div>
@@ -893,33 +892,120 @@ async function createClient() {
 
 // --- Mensagens (templates) ---
 
+// Campos do editor: [rótulo] <-> {{chave do contexto}}
+const CAMPOS_MODELO = [
+  ['nome', 'cliente', 'Maria Silva'],
+  ['vencimento', 'vencimentoBoleto', '15/10/2026'],
+  ['valor', 'valor', 'R$ 690,00'],
+  ['linha digitável', 'linhaDigitavel', '07790001161206142039908713267545515860000069000'],
+  ['dias de atraso', 'diasAtraso', '5'],
+  ['descrição', 'descricao', 'Mensalidade 10/2026'],
+];
+// Modelos antigos usam {{vencimento}} (data da cobrança) - no editor vira o mesmo [vencimento].
+const paraEditor = (t) => CAMPOS_MODELO.reduce((txt, [rot, chave]) => txt.replaceAll(`{{${chave}}}`, `[${rot}]`), String(t || '').replaceAll('{{vencimento}}', '{{vencimentoBoleto}}'));
+const doEditor = (t) => CAMPOS_MODELO.reduce((txt, [rot, chave]) => txt.replaceAll(`[${rot}]`, `{{${chave}}}`), String(t || ''));
+const escHtml = (t) => String(t).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+function previaWhatsApp(textoEditor) {
+  let t = escHtml(textoEditor);
+  for (const [rot, , ex] of CAMPOS_MODELO) t = t.replaceAll(`[${rot}]`, `<span style="background:#fff3c4; border-radius:3px;">${ex}</span>`);
+  return t.replace(/\*([^*\n]+)\*/g, '<strong>$1</strong>').replace(/_([^_\n]+)_/g, '<em>$1</em>').replaceAll('\n', '<br>');
+}
+const MODELOS_EDITAVEIS = [
+  ['BOLETO_DISPONIVEL', 'Boleto a vencer', 'Enviada quando o boleto ainda não venceu (aviso de boleto disponível).'],
+  ['COBRANCA_PENDENTE', 'Boleto vencido', 'Enviada quando o boleto já venceu (cobrança), inclusive nos lembretes da régua.'],
+];
+let modelosCache = {};
+
 async function loadTemplates() {
   const el = document.getElementById('messages-content');
   el.innerHTML = '<div class="loading">Carregando...</div>';
   try {
     const all = await api('/templates');
-    // Mostra só o que está de fato em uso hoje: WhatsApp / cobrança pendente
-    // (o único template aprovado e testado). SMS e e-mail ficam ocultos até
-    // serem configurados e testados de verdade.
-    const templates = all.filter((t) => t.channel === 'WHATSAPP' && t.type === 'COBRANCA_PENDENTE');
-    if (!templates.length) {
-      el.innerHTML = '<div class="empty">Nenhum template cadastrado.</div>';
-      return;
-    }
-    let html = '<table><thead><tr><th>Canal</th><th>Tipo</th><th>Nome</th><th>Ativo</th><th></th></tr></thead><tbody>';
-    for (const t of templates) {
-      html += `<tr>
-        <td>${t.channel}</td>
-        <td>${t.type.replaceAll('_', ' ')}</td>
-        <td>${t.name}</td>
-        <td>${t.active ? 'Sim' : 'Não'}</td>
-        <td><button class="secondary" onclick="openTemplateEdit('${t.id}')">Editar</button></td>
-      </tr>`;
-    }
-    html += '</tbody></table>';
-    el.innerHTML = html;
+    modelosCache = Object.fromEntries(all.filter((t) => t.channel === 'WHATSAPP').map((t) => [t.type, t]));
+    el.className = '';
+    el.innerHTML = MODELOS_EDITAVEIS.map(([tipo, titulo, quando]) => {
+      const t = modelosCache[tipo];
+      if (!t) return '';
+      let status;
+      if (t.pendenteNome && t.metaStatus === 'PENDING') status = `<span class="pill" style="background:#fdf3e0; color:#8a5a12;">⏳ Nova versão em análise na Meta desde ${fmtDateTime(t.pendenteEnviadoEm)}</span>`;
+      else if (t.metaStatus === 'REJECTED') status = `<span class="pill" style="background:var(--red-soft); color:var(--red);">✗ Rejeitada pela Meta: ${escHtml(t.metaMotivo || '')}</span>`;
+      else if (t.active && t.providerTemplateName) status = `<span class="pill" style="background:var(--green-soft); color:var(--green);">✓ Em uso</span>`;
+      else status = `<span class="pill" style="background:#eef1f6; color:var(--muted);">Ainda não aprovada - hoje é usada a mensagem de boleto vencido</span>`;
+      const texto = paraEditor(t.pendenteNome || t.metaStatus === 'REJECTED' ? (t.pendenteTexto || t.body) : t.body);
+      return `<div class="card">
+        <div class="card-head"><div><h3>${titulo} ${status}</h3><div class="hint">${quando}${t.providerTemplateName ? ' · modelo na Meta: <code>' + t.providerTemplateName + '</code>' : ''}</div></div></div>
+        <div style="display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap:20px;" class="modelo-grid">
+          <div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+              ${CAMPOS_MODELO.map(([rot]) => `<button class="chip" onclick="inserirCampo('${tipo}', '${rot}')">+ ${rot}</button>`).join('')}
+            </div>
+            <textarea id="modelo-texto-${tipo}" rows="14" style="width:100%; font-family:inherit; font-size:14px; padding:12px; border-radius:10px; border:1px solid var(--border); resize:vertical;"
+              oninput="atualizarPrevia('${tipo}')">${escHtml(texto)}</textarea>
+            <div style="font-size:12px; color:var(--muted); margin-top:4px;">Use *texto* para <strong>negrito</strong>. Não comece nem termine o texto com um campo, e não coloque dois campos colados (regra da Meta).</div>
+            <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
+              <button onclick="enviarModeloMeta('${tipo}')">Enviar para aprovação da Meta</button>
+              ${t.pendenteNome ? `<button class="secondary" onclick="verificarModeloMeta('${tipo}')">Verificar aprovação</button>` : ''}
+            </div>
+            <div id="modelo-msg-${tipo}" style="font-size:13px; margin-top:8px;"></div>
+          </div>
+          <div>
+            <div style="font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px;">Prévia no WhatsApp (dados de exemplo)</div>
+            <div style="background:#e5ddd5; border-radius:12px; padding:16px; min-height:200px;">
+              <div id="modelo-previa-${tipo}" style="text-align:left; background:#dcf8c6; border-radius:8px 0 8px 8px; padding:10px 12px; font-size:14px; line-height:1.45; max-width:92%; margin-left:auto; box-shadow:0 1px 1px rgba(0,0,0,.1); word-break:break-word;"></div>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    MODELOS_EDITAVEIS.forEach(([tipo]) => modelosCache[tipo] && atualizarPrevia(tipo));
   } catch (e) {
     el.innerHTML = '<div class="empty">' + e.message + '</div>';
+  }
+}
+
+function atualizarPrevia(tipo) {
+  document.getElementById('modelo-previa-' + tipo).innerHTML = previaWhatsApp(document.getElementById('modelo-texto-' + tipo).value);
+}
+
+function inserirCampo(tipo, rotulo) {
+  const ta = document.getElementById('modelo-texto-' + tipo);
+  const pos = ta.selectionStart ?? ta.value.length;
+  ta.value = ta.value.slice(0, pos) + `[${rotulo}]` + ta.value.slice(ta.selectionEnd ?? pos);
+  ta.focus();
+  ta.selectionStart = ta.selectionEnd = pos + rotulo.length + 2;
+  atualizarPrevia(tipo);
+}
+
+async function enviarModeloMeta(tipo) {
+  const t = modelosCache[tipo];
+  const msgEl = document.getElementById('modelo-msg-' + tipo);
+  const texto = doEditor(document.getElementById('modelo-texto-' + tipo).value);
+  if (!confirm('Enviar este texto para aprovação da Meta?\n\nA mensagem atual continua sendo usada até a Meta aprovar a nova (de minutos a 24h).')) return;
+  msgEl.style.color = '';
+  msgEl.textContent = 'Enviando para a Meta...';
+  try {
+    await api('/templates/' + t.id + '/enviar-meta', { method: 'POST', body: JSON.stringify({ texto }) });
+    await loadTemplates();
+    const novoMsg = document.getElementById('modelo-msg-' + tipo);
+    novoMsg.style.color = 'var(--green)';
+    novoMsg.textContent = 'Enviado! O painel confere a aprovação sozinho a cada 15 minutos.';
+  } catch (e) {
+    msgEl.style.color = 'var(--red)';
+    msgEl.textContent = e.message;
+  }
+}
+
+async function verificarModeloMeta(tipo) {
+  const msgEl = document.getElementById('modelo-msg-' + tipo);
+  msgEl.textContent = 'Consultando a Meta...';
+  try {
+    const t = await api('/templates/' + modelosCache[tipo].id + '/verificar-meta', { method: 'POST' });
+    await loadTemplates();
+    const novoMsg = document.getElementById('modelo-msg-' + tipo);
+    novoMsg.textContent = t.metaStatus === 'APPROVED' ? '✓ Aprovada! Já está em uso.' : t.metaStatus === 'REJECTED' ? 'Rejeitada - veja o motivo acima, ajuste e envie de novo.' : 'Ainda em análise na Meta.';
+  } catch (e) {
+    msgEl.style.color = 'var(--red)';
+    msgEl.textContent = e.message;
   }
 }
 

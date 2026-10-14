@@ -1,4 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { boletoNoPrazo } from '../notifications/notifications.service';
+import { hojeSaoPaulo } from '../boletos/boletos.service';
+import { buildTemplateContext, parametrosDoModelo } from '../notifications/utils/template-renderer.util';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -100,7 +103,18 @@ export class SchedulerService {
       }
 
       const nextStage = conv.stage === 'INICIADA' ? 'LEMBRETE_ENVIADO' : 'TERCEIRA_TENTATIVA';
-      const resumo = `[Lembrete automático - template cobranca_cecim] ${conv.client.name}: ${codigo}`;
+
+      // Mesmo modelo do disparo: boleto ainda no prazo usa o "boleto a vencer" (se
+      // aprovado/ativo); vencido usa o de cobrança. Sem modelo configurado, cobranca_cecim.
+      const noPrazo = boletoNoPrazo(conv.charge, hojeSaoPaulo());
+      const modelo =
+        (noPrazo && (await this.prisma.messageTemplate.findFirst({ where: { channel: 'WHATSAPP', type: 'BOLETO_DISPONIVEL', active: true } }))) ||
+        (await this.prisma.messageTemplate.findFirst({ where: { channel: 'WHATSAPP', type: 'COBRANCA_PENDENTE', active: true } }));
+      const nomeModelo = modelo?.providerTemplateName ?? 'cobranca_cecim';
+      const params = modelo?.providerParams?.length
+        ? parametrosDoModelo(modelo.providerParams, buildTemplateContext(conv.client, conv.charge as any, ''))
+        : [conv.client.name, codigo];
+      const resumo = `[Lembrete automático - modelo ${nomeModelo}] ${conv.client.name}: ${codigo}`;
 
       try {
         // Lembrete sempre via template aprovado: fora da janela de 24h desde a última
@@ -109,8 +123,8 @@ export class SchedulerService {
         await this.whatsapp.send({
           destination: conv.client.phoneE164,
           body: resumo,
-          providerTemplateName: 'cobranca_cecim',
-          templateParams: [conv.client.name, codigo],
+          providerTemplateName: nomeModelo,
+          templateParams: params,
         });
         await this.prisma.conversationMessage.create({
           data: { conversationId: conv.id, direction: 'OUTBOUND', channel: 'WHATSAPP', content: resumo },

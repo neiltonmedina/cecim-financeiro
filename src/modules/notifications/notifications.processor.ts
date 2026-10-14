@@ -9,7 +9,7 @@ import { WhatsAppProvider } from './providers/whatsapp.provider';
 import { SmsTwilioProvider } from './providers/sms-twilio.provider';
 import { EmailSmtpProvider } from './providers/email-smtp.provider';
 import { ChannelProvider } from './interfaces/channel-provider.interface';
-import { buildTemplateContext, renderTemplate, TemplateContext } from './utils/template-renderer.util';
+import { buildTemplateContext, parametrosDoModelo, renderTemplate, TemplateContext } from './utils/template-renderer.util';
 
 // Fila vazia: espera até 60s por job a cada consulta (padrão 5s) e checa jobs
 // travados a cada 5 min - o servidor fica acordado 24h e o polling padrão
@@ -97,7 +97,9 @@ export class NotificationsProcessor extends WorkerHost {
       const body = renderTemplate(template.body, context);
       const subject = template.subject ? renderTemplate(template.subject, context) : undefined;
 
-      const templateParams = this.buildWhatsAppTemplateParams(log.templateType, context);
+      const templateParams = template.providerParams?.length
+        ? parametrosDoModelo(template.providerParams, context)
+        : this.buildWhatsAppTemplateParams(log.templateType, context);
       if (log.channel === 'WHATSAPP' && template.providerTemplateName && templateParams.some((p) => !String(p ?? '').trim())) {
         // A Meta recusaria com "(#131008) Required parameter is missing" - explica o motivo real.
         throw new Error(

@@ -41,6 +41,23 @@ export function buildTemplateContext(client: Client, charge: Charge, appUrl: str
   };
 }
 
+/** Variáveis que o painel permite usar nos modelos do WhatsApp (chave do contexto -> exemplo p/ a Meta). */
+export const VARIAVEIS_MODELO: Record<string, string> = {
+  cliente: 'Maria Silva',
+  vencimentoBoleto: '15/10/2026',
+  valor: 'R$ 150,00',
+  linhaDigitavel: '07790001161206142039908513267545515860000015000',
+  diasAtraso: '5',
+  descricao: 'Mensalidade 10/2026',
+};
+
+/** Valores dos {{1}}, {{2}}... do modelo, na ordem gravada em providerParams. */
+export function parametrosDoModelo(providerParams: string[], context: TemplateContext): string[] {
+  return providerParams.map((k) =>
+    k === 'linhaDigitavel' ? context.linhaDigitavel || context.pix : String((context as any)[k] ?? ''),
+  );
+}
+
 const compiledCache = new Map<string, HandlebarsTemplateDelegate>();
 
 /**

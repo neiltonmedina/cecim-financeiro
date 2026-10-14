@@ -93,6 +93,42 @@ export class WhatsAppProvider implements ChannelProvider {
    * app - sem essa chamada, mensagens reais de clientes não chegam no
    * nosso webhook mesmo com o campo aparecendo "Assinado".
    */
+  private graph(path: string, init: RequestInit = {}) {
+    const accessToken = this.config.get<string>('whatsapp.accessToken');
+    const version = this.config.get<string>('whatsapp.apiVersion');
+    if (!accessToken) throw new Error('WhatsApp não configurado: defina WHATSAPP_ACCESS_TOKEN');
+    return fetch(`https://graph.facebook.com/${version}/${path}`, {
+      ...init,
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json', ...(init.headers ?? {}) },
+    }).then(async (r) => {
+      const data = (await r.json().catch(() => ({}))) as any;
+      if (!r.ok) throw new Error(data?.error?.error_user_msg || data?.error?.message || `Falha HTTP ${r.status} na Meta`);
+      return data;
+    });
+  }
+
+  /** Envia um modelo de mensagem (categoria Utilidade, pt_BR) para aprovação da Meta. */
+  async criarModeloMeta(nome: string, texto: string, exemplos: string[]): Promise<{ id: string; status: string }> {
+    const waba = this.config.get<string>('whatsapp.businessAccountId');
+    if (!waba) throw new Error('Defina WHATSAPP_BUSINESS_ACCOUNT_ID no Render para enviar modelos à Meta.');
+    return this.graph(`${waba}/message_templates`, {
+      method: 'POST',
+      body: JSON.stringify({
+        name: nome,
+        language: this.config.get<string>('whatsapp.templateLanguage') ?? 'pt_BR',
+        category: 'UTILITY',
+        components: [{ type: 'BODY', text: texto, ...(exemplos.length ? { example: { body_text: [exemplos] } } : {}) }],
+      }),
+    });
+  }
+
+  /** Situação de um modelo na Meta: APPROVED, PENDING, REJECTED... e o motivo da rejeição. */
+  async consultarModeloMeta(nome: string): Promise<{ status?: string; rejected_reason?: string } | undefined> {
+    const waba = this.config.get<string>('whatsapp.businessAccountId');
+    const data = await this.graph(`${waba}/message_templates?name=${encodeURIComponent(nome)}&fields=name,status,rejected_reason`);
+    return (data?.data ?? []).find((t: any) => t.name === nome);
+  }
+
   async subscribeApp(wabaId: string): Promise<unknown> {
     const accessToken = this.config.get<string>('whatsapp.accessToken');
     const version = this.config.get<string>('whatsapp.apiVersion');
