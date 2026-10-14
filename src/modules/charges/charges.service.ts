@@ -66,6 +66,7 @@ export class ChargesService {
     return this.prisma.charge.findMany({
       where: { status: params.status, clientId: params.clientId, origem: params.origem || undefined },
       // Último envio de WhatsApp: o painel mostra um alerta quando ele falhou.
+      omit: { boletoPdfBase64: true },
       include: { client: true, notifications: { where: { channel: 'WHATSAPP' }, orderBy: { queuedAt: 'desc' }, take: 1 } },
       orderBy: { dueDate: 'asc' },
     });
@@ -78,6 +79,7 @@ export class ChargesService {
   async problemas() {
     const abertas = await this.prisma.charge.findMany({
       where: { status: { in: ['PENDENTE', 'ENVIADA', 'VENCIDA'] } },
+      omit: { boletoPdfBase64: true },
       include: { client: true, notifications: { where: { channel: 'WHATSAPP' }, orderBy: { queuedAt: 'desc' }, take: 1 } },
       orderBy: { dueDate: 'asc' },
     });

@@ -24,7 +24,7 @@ export class ConversationsController {
   findAll(@Query('humanRequested') humanRequested?: string) {
     return this.prisma.conversation.findMany({
       where: humanRequested === undefined ? undefined : { humanRequested: humanRequested === 'true' },
-      include: { client: true, charge: true },
+      include: { client: true, charge: { omit: { boletoPdfBase64: true } } },
       orderBy: { updatedAt: 'desc' },
     });
   }
@@ -37,7 +37,7 @@ export class ConversationsController {
         client: true,
         // Situação dos envios da cobrança - mostra no painel por que uma conversa
         // ainda não tem mensagem (na fila, falhou e o motivo, etc.).
-        charge: { include: { notifications: { where: { channel: 'WHATSAPP' }, orderBy: { queuedAt: 'desc' }, take: 5 } } },
+        charge: { omit: { boletoPdfBase64: true }, include: { notifications: { where: { channel: 'WHATSAPP' }, orderBy: { queuedAt: 'desc' }, take: 5 } } },
         messages: { orderBy: { createdAt: 'asc' } },
         agreements: true,
       },

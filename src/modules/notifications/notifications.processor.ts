@@ -46,7 +46,7 @@ export class NotificationsProcessor extends WorkerHost {
   async enviarNotificacao(notificationLogId: string, attempt = 1): Promise<void> {
     const log = await this.prisma.notificationLog.findUnique({
       where: { id: notificationLogId },
-      include: { charge: { include: { client: true } } },
+      include: { charge: { omit: { boletoPdfBase64: true }, include: { client: true } } },
     });
     if (!log) {
       this.logger.warn(`NotificationLog ${notificationLogId} não encontrado, ignorando job.`);

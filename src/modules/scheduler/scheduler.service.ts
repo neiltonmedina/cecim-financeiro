@@ -55,7 +55,7 @@ export class SchedulerService {
         stage: { in: ['INICIADA', 'LEMBRETE_ENVIADO', 'TERCEIRA_TENTATIVA'] },
         client: { active: true },
       },
-      include: { client: true, charge: true },
+      include: { client: true, charge: { omit: { boletoPdfBase64: true } } },
     });
 
     for (const conv of conversations) {

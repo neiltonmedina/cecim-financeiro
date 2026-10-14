@@ -1,5 +1,7 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  // omitApi: listas não carregam o PDF do boleto (base64, dezenas de KB por cobrança).
+  previewFeatures = ["omitApi"]
 }
 
 datasource db {
