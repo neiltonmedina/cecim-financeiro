@@ -63,3 +63,10 @@ describe('template-renderer.util', () => {
     expect(rendered).toBe('Olá João, valor R$ 100,00, vence 05/05/2026.');
   });
 });
+
+describe('formatDateBR - vencimento sem voltar um dia', () => {
+  it('mostra o mesmo dia gravado (meia-noite UTC), mesmo no fuso do Brasil', () => {
+    const { formatDateBR } = require('./template-renderer.util');
+    expect(formatDateBR(new Date('2026-10-15T00:00:00.000Z'))).toBe('15/10/2026');
+  });
+});

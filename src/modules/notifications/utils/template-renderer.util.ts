@@ -17,8 +17,13 @@ export function formatCurrencyBRL(amountCents: number): string {
   return (amountCents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
+/**
+ * Datas de vencimento são "só o dia", gravadas como meia-noite UTC (ex: 15/10 ->
+ * 2026-10-15T00:00Z). Formatar no fuso de São Paulo (UTC-3) voltava um dia
+ * (14/10 21h) - por isso a formatação é em UTC.
+ */
 export function formatDateBR(date: Date): string {
-  return new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo' }).format(date);
+  return new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(date);
 }
 
 /** Dias corridos de atraso (0 se ainda não venceu). */
