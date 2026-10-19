@@ -16,6 +16,12 @@ export class ReportsController {
     return this.reportsService.dashboard();
   }
 
+  /** Mensagens do agente que ofereceram desconto/parcelamento/acordo. */
+  @Get('ofertas-negociacao')
+  ofertasNegociacao() {
+    return this.reportsService.ofertasNegociacao();
+  }
+
   /** Relatório periódico do agente de cobrança: contatados, respostas, acordos, pagamentos, etc. */
   @Get('cobranca')
   cobranca(@Query('from') from?: string, @Query('to') to?: string) {

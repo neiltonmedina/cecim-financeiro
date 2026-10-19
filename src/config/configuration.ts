@@ -45,6 +45,9 @@ export default () => ({
     moraTaxaMensal: parseFloat((process.env.INTER_MORA_TAXA_MENSAL ?? '0').replace(',', '.')) || 0,
   },
   escalationEmail: process.env.ESCALATION_EMAIL ?? '',
+  // Onde o cliente fala com a CECIM sobre outros assuntos (o WhatsApp de cobrança é só
+  // para boletos e Pix). Ex: "pelo telefone (94) 3346-0000 ou e-mail contato@cecim.com.br".
+  contatoAtendimento: process.env.CONTATO_ATENDIMENTO ?? '',
   smtp: {
     host: process.env.SMTP_HOST ?? '',
     port: parseInt(process.env.SMTP_PORT ?? '587', 10),

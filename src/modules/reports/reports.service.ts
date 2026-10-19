@@ -125,6 +125,33 @@ export class ReportsService {
     };
   }
 
+  /**
+   * Mensagens do agente que mencionaram desconto/parcelamento/acordo - para saber
+   * quais clientes receberam ofertas que a empresa não autorizou.
+   */
+  async ofertasNegociacao() {
+    const mensagens = await this.prisma.conversationMessage.findMany({
+      where: {
+        direction: 'OUTBOUND',
+        OR: ['desconto', 'parcel', 'parcela', 'acordo'].map((t) => ({ content: { contains: t, mode: 'insensitive' as const } })),
+      },
+      include: { conversation: { include: { client: { select: { name: true, phoneE164: true } } } } },
+      orderBy: { createdAt: 'desc' },
+    });
+    const clientes = new Set(mensagens.map((m) => m.conversation.clientId));
+    return {
+      totalMensagens: mensagens.length,
+      totalClientes: clientes.size,
+      mensagens: mensagens.map((m) => ({
+        cliente: m.conversation.client.name,
+        telefone: m.conversation.client.phoneE164,
+        conversationId: m.conversationId,
+        enviadaEm: m.createdAt,
+        texto: m.content,
+      })),
+    };
+  }
+
   async cobranca(from: Date, to: Date): Promise<CobrancaReport> {
     const conversations = await this.prisma.conversation.findMany({
       where: { createdAt: { gte: from, lte: to } },

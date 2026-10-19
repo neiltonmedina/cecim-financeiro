@@ -130,9 +130,10 @@ export class ConversationsService {
       });
     }
 
-    if (conversation.humanRequested || conversation.paused) {
-      // Automação pausada (escalada para humano, ou pausada manualmente no painel):
-      // apenas registra a mensagem, nunca responde sozinho.
+    if (conversation.paused) {
+      // Automação pausada manualmente no painel: apenas registra a mensagem.
+      // (humanRequested NÃO silencia: o canal é só de boletos/Pix, sem atendente -
+      // é apenas um aviso interno no painel; o cliente continua recebendo Pix/boleto.)
       await this.logMessage(conversation.id, 'INBOUND', text);
       await this.prisma.conversation.update({
         where: { id: conversation.id },
@@ -171,7 +172,7 @@ export class ConversationsService {
     if (charge && (opcao === '2' || /boleto/i.test(text.trim()))) {
       let mensagens: string[];
       if (!charge.paymentLink) {
-        mensagens = ['Ainda não temos o boleto disponível para essa cobrança - já vou encaminhar para um atendente confirmar.'];
+        mensagens = ['O boleto desta cobrança ainda não está disponível. Assim que for emitido, ele será enviado por aqui.'];
       } else {
         // Boleto vencido: gera a segunda via com o valor atualizado (o PDF do
         // boleto vencido mostra o valor original).
@@ -225,7 +226,7 @@ export class ConversationsService {
 
     await this.whatsapp.send({ destination: phone, body: decision.reply });
 
-    // O agente não negocia: pedido de desconto/parcelamento/acordo sempre vai para atendente.
+    // O agente não negocia: pedido de desconto/parcelamento/acordo sempre gera o aviso interno no painel.
     const encaminhar = decision.requestHumanHandoff || decision.intent === 'QUER_NEGOCIAR';
     const nextStage: ConversationStage = encaminhar
       ? 'AGUARDANDO_HUMANO'
