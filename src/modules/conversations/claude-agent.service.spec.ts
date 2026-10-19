@@ -15,8 +15,9 @@ describe('ClaudeAgentService - canal só para boletos e Pix', () => {
     expect(prompt).not.toContain('Desconto máximo autorizado');
   });
 
-  it('indica o contato da CECIM para outros assuntos quando configurado', () => {
-    const prompt: string = comContato('pelo telefone (94) 3346-0000').buildSystemPrompt(null, 'https://app');
-    expect(prompt).toContain('falar com a CECIM pelo telefone (94) 3346-0000');
+  it('não indica nenhum outro canal de atendimento', () => {
+    const prompt: string = comContato('').buildSystemPrompt(null, 'https://app');
+    expect(prompt).toContain('Não indique nenhum outro canal');
+    expect(prompt).not.toContain('falar com a CECIM');
   });
 });

@@ -76,10 +76,6 @@ export class ClaudeAgentService {
     // Decisão da empresa: este WhatsApp é SÓ para envio de boletos e Pix. Não há
     // atendimento humano por ele e o agente não negocia (a política cadastrada é ignorada).
     void policy;
-    const contato = this.config.get<string>('contatoAtendimento');
-    const ondeFalar = contato
-      ? `para outros assuntos, o cliente deve falar com a CECIM ${contato}`
-      : 'para outros assuntos, o cliente deve procurar a CECIM pelos canais de atendimento habituais do escritório';
 
     return [
       `Você é o assistente automático de cobrança da CECIM Assessoria Contábil no WhatsApp.`,
@@ -96,6 +92,7 @@ export class ClaudeAgentService {
       `PROIBIDO (nunca faça):`,
       `- Oferecer, sugerir ou aceitar desconto, parcelamento, mais prazo, acordo ou qualquer condição diferente.`,
       `- Prometer que um atendente, pessoa ou equipe vai responder ou continuar a conversa por aqui.`,
+      `- Indicar outro canal de atendimento (telefone, e-mail, site, escritório ou qualquer contato).`,
       `- Pedir comprovante, documentos, senhas, dados de cartão ou qualquer informação.`,
       `- Calcular multa, juros ou valores: use exatamente o valor e o link do contexto (já vêm prontos do Banco Inter).`,
       ``,
@@ -106,7 +103,7 @@ export class ClaudeAgentService {
         ` úteis no boleto) e que, se já pagou, pode desconsiderar as mensagens. intent = JA_PAGOU, requestHumanHandoff = false.`,
       `- Cliente pede desconto, parcelamento, prazo, acordo, quer falar com alguém, não reconhece a cobrança ou qualquer` +
         ` outro assunto: explique com cordialidade que este canal é automático e serve apenas para envio de boletos e Pix,` +
-        ` que ${ondeFalar}, e lembre que pode responder *1* (Pix) ou *2* (boleto).` +
+        ` e lembre que pode responder *1* (Pix) ou *2* (boleto). Não indique nenhum outro canal, telefone, e-mail ou contato.` +
         ` Marque requestHumanHandoff = true (é só um aviso interno para a equipe - NÃO diga ao cliente que alguém vai responder).`,
       `- requestPaymentProof é sempre false.`,
       ``,
