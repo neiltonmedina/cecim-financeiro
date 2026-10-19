@@ -4,7 +4,7 @@ import { ConversationStage, MessageDirection } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WhatsAppProvider } from '../notifications/providers/whatsapp.provider';
 import { EmailSmtpProvider } from '../notifications/providers/email-smtp.provider';
-import { ClaudeAgentService } from './claude-agent.service';
+import { ClaudeAgentService, filtrarRespostaDoAgente } from './claude-agent.service';
 import { BoletosService } from '../boletos/boletos.service';
 import { formatCurrencyBRL } from '../notifications/utils/template-renderer.util';
 
@@ -222,12 +222,18 @@ export class ConversationsService {
       appUrl: this.config.get<string>('appUrl')!,
     });
 
-    await this.logMessage(conversation.id, 'OUTBOUND', decision.reply, decision.intent);
+    // Trava final: nada de desconto, parcelamento, acordo, atendente ou outro canal,
+    // mesmo que a IA erre - nesse caso vai a resposta fixa e o painel recebe o aviso.
+    const filtrada = filtrarRespostaDoAgente(decision.reply);
+    if (filtrada.bloqueada) {
+      this.logger.warn(`Resposta do agente bloqueada (termo proibido) para ${client.name}: "${decision.reply}"`);
+    }
+    await this.logMessage(conversation.id, 'OUTBOUND', filtrada.texto, decision.intent);
 
-    await this.whatsapp.send({ destination: phone, body: decision.reply });
+    await this.whatsapp.send({ destination: phone, body: filtrada.texto });
 
     // O agente não negocia: pedido de desconto/parcelamento/acordo sempre gera o aviso interno no painel.
-    const encaminhar = decision.requestHumanHandoff || decision.intent === 'QUER_NEGOCIAR';
+    const encaminhar = decision.requestHumanHandoff || decision.intent === 'QUER_NEGOCIAR' || filtrada.bloqueada;
     const nextStage: ConversationStage = encaminhar
       ? 'AGUARDANDO_HUMANO'
       : decision.intent === 'QUER_NEGOCIAR'

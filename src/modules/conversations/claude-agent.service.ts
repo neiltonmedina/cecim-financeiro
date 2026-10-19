@@ -54,6 +54,26 @@ const RESPONDER_TOOL: Anthropic.Tool = {
   strict: true,
 };
 
+/** Resposta fixa usada quando a IA escreve algo proibido. */
+export const RESPOSTA_SEGURA =
+  'Este canal é automático e serve apenas para envio de boletos e códigos Pix. ' +
+  'Responda *1* para receber o Pix ou *2* para receber o boleto.';
+
+/**
+ * Termos que a empresa não autoriza no WhatsApp de cobrança: negociação de qualquer
+ * tipo, promessa de atendente ou indicação de outro canal. ("de acordo" é permitido.)
+ */
+const TERMOS_PROIBIDOS =
+  /desconto|parcel|abatimento|(?<!de )acordo|negocia|prorroga|adia(r|mento)|condi[cç](ão|ao|ões|oes) especia|sem juros|isen[cç]|perd[aã]o|atendente|nossa equipe|falar com (algu[eé]m|uma pessoa|um humano)|telefone|e-?mail|whats(app)? (do|da) (escrit|empresa)/i;
+
+/**
+ * Trava final, independente da IA: se a resposta gerada tiver qualquer termo
+ * proibido, ela NÃO é enviada - vai a RESPOSTA_SEGURA no lugar.
+ */
+export function filtrarRespostaDoAgente(resposta: string): { texto: string; bloqueada: boolean } {
+  return TERMOS_PROIBIDOS.test(resposta) ? { texto: RESPOSTA_SEGURA, bloqueada: true } : { texto: resposta, bloqueada: false };
+}
+
 @Injectable()
 export class ClaudeAgentService {
   private readonly logger = new Logger(ClaudeAgentService.name);
