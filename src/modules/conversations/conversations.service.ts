@@ -225,7 +225,9 @@ export class ConversationsService {
 
     await this.whatsapp.send({ destination: phone, body: decision.reply });
 
-    const nextStage: ConversationStage = decision.requestHumanHandoff
+    // O agente não negocia: pedido de desconto/parcelamento/acordo sempre vai para atendente.
+    const encaminhar = decision.requestHumanHandoff || decision.intent === 'QUER_NEGOCIAR';
+    const nextStage: ConversationStage = encaminhar
       ? 'AGUARDANDO_HUMANO'
       : decision.intent === 'QUER_NEGOCIAR'
         ? 'NEGOCIACAO'
@@ -237,13 +239,13 @@ export class ConversationsService {
       where: { id: conversation.id },
       data: {
         stage: nextStage,
-        humanRequested: decision.requestHumanHandoff,
+        humanRequested: encaminhar,
         lastInboundAt: new Date(),
         lastOutboundAt: new Date(),
       },
     });
 
-    if (decision.requestHumanHandoff) {
+    if (encaminhar) {
       await this.notifyHumanEscalation(client.name, phone, text, charge?.description);
     }
   }

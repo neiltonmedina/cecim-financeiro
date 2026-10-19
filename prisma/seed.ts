@@ -160,19 +160,14 @@ async function main() {
   }
   console.log('Regras de lembrete padrão garantidas.');
 
-  const existingPolicy = await prisma.negotiationPolicy.findFirst({ where: { active: true } });
-  if (!existingPolicy) {
-    await prisma.negotiationPolicy.create({
-      data: {
-        name: 'Política padrão de negociação',
-        active: true,
-        maxDiscountPercent: 10,
-        maxInstallments: 3,
-        notes: 'Desconto de até 10% apenas para pagamento à vista. Parcelamento em até 3x sem desconto.',
-      },
-    });
-    console.log('Política de negociação padrão criada (ajuste em NegotiationPolicy conforme sua empresa).');
-  }
+  // Nenhuma política de negociação é criada automaticamente: desconto/parcelamento
+  // só existem se a empresa cadastrar. A política "padrão" de exemplo (10% / 3x) que
+  // versões antigas criavam sozinhas é desativada - nunca foi autorizada pela empresa.
+  const desativadas = await prisma.negotiationPolicy.updateMany({
+    where: { name: 'Política padrão de negociação', maxDiscountPercent: 10, maxInstallments: 3, active: true },
+    data: { active: false },
+  });
+  if (desativadas.count) console.log('Política de negociação de exemplo (10% / 3x) desativada.');
 }
 
 main()

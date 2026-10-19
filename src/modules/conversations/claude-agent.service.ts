@@ -73,11 +73,15 @@ export class ClaudeAgentService {
   }
 
   private buildSystemPrompt(policy: NegotiationPolicy | null, appUrl: string): string {
-    const negotiationRules = policy
-      ? `- Desconto máximo autorizado: ${policy.maxDiscountPercent}%.\n` +
-        `- Máximo de parcelas autorizadas: ${policy.maxInstallments}x.\n` +
-        (policy.notes ? `- Observações da política: ${policy.notes}\n` : '')
-      : '- Nenhuma negociação/desconto está autorizada no momento. Não ofereça nada, apenas informe que vai encaminhar para um atendente.\n';
+    // Decisão da empresa: o agente NÃO negocia. As únicas opções são Pix e boleto;
+    // qualquer pedido de desconto, parcelamento ou prazo vai para um atendente.
+    // (A política de negociação cadastrada é ignorada de propósito.)
+    void policy;
+    const negotiationRules =
+      '- Você NÃO negocia. Não ofereça nem aceite desconto, parcelamento, prorrogação de prazo ou qualquer outra condição.\n' +
+      '- As únicas opções que você oferece são: Pix (cliente responde 1) e boleto (cliente responde 2).\n' +
+      '- Se o cliente pedir desconto, parcelamento, mais prazo ou qualquer acordo, responda com cordialidade que vai' +
+      ' encaminhar para um atendente da equipe e marque requestHumanHandoff = true.\n';
 
     return [
       `Você é o agente de cobrança da empresa CECIM - Financeiro, atendendo pelo WhatsApp.`,
@@ -90,6 +94,7 @@ export class ClaudeAgentService {
       `REGRAS DE NEGOCIAÇÃO (nunca infrinja):`,
       negotiationRules,
       `- NUNCA invente descontos, valores, prazos ou condições fora do que está definido acima.`,
+      `- NUNCA mencione desconto, parcelamento ou acordo por iniciativa própria - nem como sugestão.`,
       `- Se o cliente pedir algo fora dessas condições, explique que não pode autorizar e ofereça encaminhar para um atendente (requestHumanHandoff = true).`,
       ``,
       `VALORES E JUROS/MULTA - REGRA CRÍTICA:`,
