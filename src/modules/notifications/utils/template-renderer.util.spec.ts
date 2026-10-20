@@ -1,4 +1,5 @@
-import { buildTemplateContext, calcularDiasAtraso, formatCurrencyBRL, formatDateBR, renderTemplate } from './template-renderer.util';
+import { BOTOES_COBRANCA, buildTemplateContext, calcularDiasAtraso, formatCurrencyBRL, formatDateBR, payloadsDosBotoes, renderTemplate } from './template-renderer.util';
+import { montarComponentesTemplate } from '../providers/whatsapp.provider';
 
 // Node formata moeda pt-BR com espaco normal ou non-breaking space, dependendo
 // da versao/dados de ICU disponiveis - normaliza qualquer espaco antes de comparar.
@@ -68,5 +69,20 @@ describe('formatDateBR - vencimento sem voltar um dia', () => {
   it('mostra o mesmo dia gravado (meia-noite UTC), mesmo no fuso do Brasil', () => {
     const { formatDateBR } = require('./template-renderer.util');
     expect(formatDateBR(new Date('2026-10-15T00:00:00.000Z'))).toBe('15/10/2026');
+  });
+});
+
+describe('botões Pix e Boleto', () => {
+  it('cada botão leva o id da cobrança no payload', () => {
+    expect(payloadsDosBotoes(BOTOES_COBRANCA, 'c1')).toEqual(['PIX:c1', 'BOLETO:c1']);
+  });
+
+  it('monta os componentes do modelo com corpo e botões', () => {
+    expect(montarComponentesTemplate(['Ana'], ['PIX:c1', 'BOLETO:c1'])).toEqual([
+      { type: 'body', parameters: [{ type: 'text', text: 'Ana' }] },
+      { type: 'button', sub_type: 'quick_reply', index: '0', parameters: [{ type: 'payload', payload: 'PIX:c1' }] },
+      { type: 'button', sub_type: 'quick_reply', index: '1', parameters: [{ type: 'payload', payload: 'BOLETO:c1' }] },
+    ]);
+    expect(montarComponentesTemplate()).toBeUndefined();
   });
 });

@@ -56,6 +56,14 @@ export const VARIAVEIS_MODELO: Record<string, string> = {
   descricao: 'Mensalidade 10/2026',
 };
 
+/** Botões de resposta rápida dos modelos de cobrança (a vencer / vencido). */
+export const BOTOES_COBRANCA = ['Pix', 'Boleto'];
+
+/** Payload de cada botão: identifica a ação e a cobrança exata (ex: "PIX:<id>"). */
+export function payloadsDosBotoes(botoes: string[], chargeId: string): string[] {
+  return botoes.map((b) => `${b.toUpperCase()}:${chargeId}`);
+}
+
 /** Valores dos {{1}}, {{2}}... do modelo, na ordem gravada em providerParams. */
 export function parametrosDoModelo(providerParams: string[], context: TemplateContext): string[] {
   return providerParams.map((k) =>

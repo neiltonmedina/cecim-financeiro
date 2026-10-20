@@ -132,12 +132,15 @@ model MessageTemplate {
   // (cliente, vencimentoBoleto, valor, linhaDigitavel, diasAtraso, descricao).
   // Vazio = modelos antigos, com parâmetros fixos no código.
   providerParams String[] @default([])
+  // Botões de resposta rápida do modelo na Meta (ex: ["Pix", "Boleto"]), na ordem.
+  providerBotoes String[] @default([])
   // Versão nova enviada pelo painel para aprovação da Meta (só vira a oficial quando aprovada).
   metaStatus        String? // PENDING | APPROVED | REJECTED
   metaMotivo        String?
   pendenteNome      String?
   pendenteTexto     String?
   pendenteParams    String[] @default([])
+  pendenteBotoes    String[] @default([])
   pendenteEnviadoEm DateTime?
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt

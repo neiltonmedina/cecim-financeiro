@@ -169,3 +169,62 @@ describe('ConversationsService - mesmo WhatsApp para duas empresas', () => {
     expect(whatsapp.send.mock.calls[1][0].body).toBe('PIX-DA-DRAT');
   });
 });
+
+describe('ConversationsService - botões Pix e Boleto', () => {
+  const chargeA = {
+    id: 'charge-A', clientId: 'cli-A', status: 'ENVIADA',
+    pixCopiaECola: 'PIX-DA-EMPRESA-A', linhaDigitavel: 'LINHA-A',
+    paymentLink: 'https://x/boletos/charge-A', amountCents: 500,
+  };
+
+  function setupBotoes(cobranca: any = chargeA) {
+    const prisma: any = {
+      processedWhatsAppMessage: { create: jest.fn().mockResolvedValue({}) },
+      // Mesmo telefone em duas empresas.
+      client: { findMany: jest.fn().mockResolvedValue([{ id: 'cli-A', name: 'Empresa A' }, { id: 'cli-B', name: 'Empresa B' }]) },
+      conversation: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'conv-A', clientId: 'cli-A', chargeId: 'charge-A', messages: [] }),
+        update: jest.fn(),
+        create: jest.fn(),
+      },
+      charge: { findFirst: jest.fn().mockResolvedValue(cobranca), findUnique: jest.fn().mockResolvedValue(cobranca) },
+      conversationMessage: { create: jest.fn() },
+    };
+    const whatsapp: any = { send: jest.fn().mockResolvedValue({}), sendDocument: jest.fn().mockResolvedValue({}) };
+    const boletos: any = {
+      gerarSegundaViaAtualizada: jest.fn().mockResolvedValue({
+        charge: cobranca, valor: { diasAtraso: 0, multaCents: 0, jurosCents: 0, totalCents: 500 }, atualizado: false,
+      }),
+    };
+    const service = new ConversationsService(prisma, whatsapp, {} as any, {} as any, {} as any, boletos);
+    return { service, prisma, whatsapp };
+  }
+
+  it('botão Pix: usa a cobrança do payload, mesmo com telefone compartilhado', async () => {
+    const { service, prisma, whatsapp } = setupBotoes();
+    await service.handleInboundWhatsApp('5599991646386', 'Pix', 'wamid.b1', 'PIX:charge-A');
+
+    expect(prisma.charge.findFirst).toHaveBeenCalledWith({
+      where: { id: 'charge-A', clientId: { in: ['cli-A', 'cli-B'] } },
+    });
+    expect(prisma.conversation.findFirst.mock.calls[0][0].where.chargeId).toBe('charge-A');
+    expect(whatsapp.send.mock.calls[0][0].body).toContain('*Empresa A*');
+    expect(whatsapp.send.mock.calls[1][0].body).toBe('PIX-DA-EMPRESA-A');
+  });
+
+  it('botão Boleto: manda o PDF anexado e depois a linha digitável sozinha', async () => {
+    const { service, whatsapp } = setupBotoes();
+    await service.handleInboundWhatsApp('5599991646386', 'Boleto', 'wamid.b2', 'BOLETO:charge-A');
+
+    expect(whatsapp.sendDocument).toHaveBeenCalledWith('+5599991646386', chargeA.paymentLink, 'Boleto CECIM - Empresa A.pdf');
+    expect(whatsapp.send.mock.calls.at(-1)[0].body).toBe('LINHA-A');
+  });
+
+  it('cobrança já paga: avisa e não manda Pix nem boleto', async () => {
+    const { service, whatsapp } = setupBotoes({ ...chargeA, status: 'PAGA' });
+    await service.handleInboundWhatsApp('5599991646386', 'Pix', 'wamid.b3', 'PIX:charge-A');
+
+    expect(whatsapp.send).toHaveBeenCalledTimes(1);
+    expect(whatsapp.send.mock.calls[0][0].body).toContain('paga');
+  });
+});

@@ -3,7 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { Channel, TemplateType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WhatsAppProvider } from '../notifications/providers/whatsapp.provider';
-import { VARIAVEIS_MODELO } from '../notifications/utils/template-renderer.util';
+import { BOTOES_COBRANCA, VARIAVEIS_MODELO } from '../notifications/utils/template-renderer.util';
 import { UpdateTemplateDto } from './dto/update-template.dto';
 
 /** Nome-base do modelo na Meta por tipo (cada nova versão ganha um sufixo de data). */
@@ -81,7 +81,8 @@ export class TemplatesService {
     const nome = `${base}_${new Date().toISOString().replace(/\D/g, '').slice(0, 12)}`;
     let resposta: { id: string; status: string };
     try {
-      resposta = await this.whatsapp.criarModeloMeta(nome, textoMeta, exemplos);
+      // Modelos de cobrança levam os botões Pix e Boleto (o cliente toca em vez de digitar 1/2).
+      resposta = await this.whatsapp.criarModeloMeta(nome, textoMeta, exemplos, BOTOES_COBRANCA);
     } catch (error: any) {
       throw new BadRequestException('A Meta recusou o envio: ' + error.message);
     }
@@ -92,6 +93,7 @@ export class TemplatesService {
         pendenteNome: nome,
         pendenteTexto: texto.trim(),
         pendenteParams: params,
+        pendenteBotoes: BOTOES_COBRANCA,
         pendenteEnviadoEm: new Date(),
         metaStatus: 'PENDING',
         metaMotivo: null,
@@ -117,12 +119,14 @@ export class TemplatesService {
           providerTemplateName: template.pendenteNome,
           body: template.pendenteTexto ?? template.body,
           providerParams: template.pendenteParams,
+          providerBotoes: template.pendenteBotoes,
           active: true,
           metaStatus: 'APPROVED',
           metaMotivo: null,
           pendenteNome: null,
           pendenteTexto: null,
           pendenteParams: [],
+          pendenteBotoes: [],
         },
       });
     }

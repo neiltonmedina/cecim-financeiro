@@ -17,6 +17,12 @@ export interface ChannelSendInput {
   templateLanguage?: string;
   /** Parâmetros posicionais para preencher o template aprovado do WhatsApp. */
   templateParams?: string[];
+  /**
+   * Payload de cada botão de resposta rápida do template, na ordem dos botões
+   * (ex: ["PIX:<id-da-cobrança>", "BOLETO:<id>"]) - volta no webhook quando o
+   * cliente toca no botão, identificando a cobrança exata.
+   */
+  templateButtonPayloads?: string[];
 }
 
 export interface ChannelProvider {

@@ -70,9 +70,12 @@ export class WebhooksController {
 
         const messages = change.value?.messages ?? [];
         for (const message of messages) {
-          const text = message.text?.body;
+          // Texto digitado, toque em botão de resposta rápida de template (type "button")
+          // ou de mensagem interativa (type "interactive").
+          const text = message.text?.body ?? message.button?.text ?? message.interactive?.button_reply?.title;
+          const payload = message.button?.payload ?? message.interactive?.button_reply?.id;
           if (message.from && text) {
-            this.conversations.handleInboundWhatsApp(message.from, text, message.id).catch((err) => {
+            this.conversations.handleInboundWhatsApp(message.from, text, message.id, payload).catch((err) => {
               this.logger.error(`Erro ao processar mensagem do agente: ${err.message}`);
             });
           }

@@ -922,6 +922,14 @@ const MODELOS_EDITAVEIS = [
   ['COBRANCA_PENDENTE', 'Boleto vencido', 'Enviada quando o boleto já venceu (cobrança), inclusive nos lembretes da régua.'],
 ];
 let modelosCache = {};
+// Textos sugeridos para a versão com botões (sem a linha digitável - o código vai
+// sozinho, copiável, quando o cliente toca em Pix ou Boleto).
+const SUGESTAO_COM_BOTOES = {
+  BOLETO_DISPONIVEL: 'Olá, [nome]! 😊\n\nSeu boleto da *CECIM Assessoria Contábil* já está disponível.\n\n📅 Vencimento: *[vencimento]*\n💰 Valor: *[valor]*\n\nEscolha abaixo a forma de pagamento:',
+  COBRANCA_PENDENTE: 'Olá, [nome]. O boleto da *CECIM Assessoria Contábil* com vencimento em *[vencimento]* continua em aberto.\n\n💰 Valor original: *[valor]*. Ao escolher Pix ou Boleto, você recebe o valor já atualizado.\n\nEscolha abaixo a forma de pagamento:',
+};
+const BOTOES_PREVIA = '<div style="display:flex; flex-direction:column; gap:4px; max-width:92%; margin-left:auto; margin-top:4px;">' +
+  ['Pix', 'Boleto'].map((b) => `<div style="background:#fff; border-radius:8px; text-align:center; padding:8px; color:#0a7cff; font-weight:600; font-size:14px; box-shadow:0 1px 1px rgba(0,0,0,.1);">↩ ${b}</div>`).join('') + '</div>';
 
 async function loadTemplates() {
   const el = document.getElementById('messages-content');
@@ -938,9 +946,13 @@ async function loadTemplates() {
       else if (t.metaStatus === 'REJECTED') status = `<span class="pill" style="background:var(--red-soft); color:var(--red);">✗ Rejeitada pela Meta: ${escHtml(t.metaMotivo || '')}</span>`;
       else if (t.active && t.providerTemplateName) status = `<span class="pill" style="background:var(--green-soft); color:var(--green);">✓ Em uso</span>`;
       else status = `<span class="pill" style="background:#eef1f6; color:var(--muted);">Ainda não aprovada - hoje é usada a mensagem de boleto vencido</span>`;
-      const texto = paraEditor(t.pendenteNome || t.metaStatus === 'REJECTED' ? (t.pendenteTexto || t.body) : t.body);
+      // Ainda sem a versão com botões (e nada em análise): já sugere o texto novo.
+      const semBotoes = !(t.providerBotoes || []).length && !t.pendenteNome && t.metaStatus !== 'REJECTED';
+      const texto = semBotoes && SUGESTAO_COM_BOTOES[tipo]
+        ? SUGESTAO_COM_BOTOES[tipo]
+        : paraEditor(t.pendenteNome || t.metaStatus === 'REJECTED' ? (t.pendenteTexto || t.body) : t.body);
       return `<div class="card">
-        <div class="card-head"><div><h3>${titulo} ${status}</h3><div class="hint">${quando}${t.providerTemplateName ? ' · modelo na Meta: <code>' + t.providerTemplateName + '</code>' : ''}</div></div></div>
+        <div class="card-head"><div><h3>${titulo} ${status}</h3><div class="hint">${quando} Vai com os botões <strong>Pix</strong> e <strong>Boleto</strong>.${semBotoes ? ' <strong style="color:#8a5a12;">Texto novo sugerido (com botões) - revise e envie para aprovação.</strong>' : ''}${t.providerTemplateName ? ' · modelo na Meta: <code>' + t.providerTemplateName + '</code>' : ''}</div></div></div>
         <div style="display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap:20px;" class="modelo-grid">
           <div>
             <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
@@ -959,6 +971,7 @@ async function loadTemplates() {
             <div style="font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px;">Prévia no WhatsApp (dados de exemplo)</div>
             <div style="background:#e5ddd5; border-radius:12px; padding:16px; min-height:200px;">
               <div id="modelo-previa-${tipo}" style="text-align:left; background:#dcf8c6; border-radius:8px 0 8px 8px; padding:10px 12px; font-size:14px; line-height:1.45; max-width:92%; margin-left:auto; box-shadow:0 1px 1px rgba(0,0,0,.1); word-break:break-word;"></div>
+              ${BOTOES_PREVIA}
             </div>
           </div>
         </div>

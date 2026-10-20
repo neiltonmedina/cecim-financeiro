@@ -9,7 +9,7 @@ import { WhatsAppProvider } from './providers/whatsapp.provider';
 import { SmsTwilioProvider } from './providers/sms-twilio.provider';
 import { EmailSmtpProvider } from './providers/email-smtp.provider';
 import { ChannelProvider } from './interfaces/channel-provider.interface';
-import { buildTemplateContext, parametrosDoModelo, renderTemplate, TemplateContext } from './utils/template-renderer.util';
+import { buildTemplateContext, parametrosDoModelo, payloadsDosBotoes, renderTemplate, TemplateContext } from './utils/template-renderer.util';
 
 // Fila vazia: espera até 60s por job a cada consulta (padrão 5s) e checa jobs
 // travados a cada 5 min - o servidor fica acordado 24h e o polling padrão
@@ -114,6 +114,7 @@ export class NotificationsProcessor extends WorkerHost {
         subject,
         providerTemplateName: template.providerTemplateName ?? undefined,
         templateParams,
+        templateButtonPayloads: template.providerBotoes?.length ? payloadsDosBotoes(template.providerBotoes, log.chargeId) : undefined,
       });
 
       await this.prisma.notificationLog.update({

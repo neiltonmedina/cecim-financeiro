@@ -90,7 +90,7 @@ export class ConversationsService {
   }
 
   /** Processa uma mensagem recebida do cliente via WhatsApp. */
-  async handleInboundWhatsApp(fromPhoneRaw: string, text: string, messageId?: string) {
+  async handleInboundWhatsApp(fromPhoneRaw: string, text: string, messageId?: string, payload?: string) {
     // A Meta pode entregar o mesmo evento mais de uma vez: só processa cada
     // mensagem uma vez (o insert com chave primária é atômico, então funciona
     // mesmo com entregas simultâneas).
@@ -116,12 +116,41 @@ export class ConversationsService {
     // conversa que recebeu cobrança mais recentemente.
     const telefoneCompartilhado = clientes.length > 1;
 
-    let conversation = await this.prisma.conversation.findFirst({
-      where: { clientId: { in: clientes.map((c) => c.id) }, stage: { not: 'ENCERRADA' } },
-      orderBy: [{ lastOutboundAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
-      include: { messages: { orderBy: { createdAt: 'asc' } } },
-    });
-    const client = clientes.find((c) => c.id === conversation?.clientId) ?? clientes[0];
+    // Toque no botão Pix/Boleto: o payload traz a cobrança exata ("PIX:<id>").
+    // Só vale se a cobrança for de um cliente deste telefone.
+    const botao = /^(PIX|BOLETO):(.+)$/.exec(payload ?? '');
+    const cobrancaDoBotao = botao
+      ? await this.prisma.charge.findFirst({ where: { id: botao[2], clientId: { in: clientes.map((c) => c.id) } } })
+      : null;
+    if (cobrancaDoBotao && (cobrancaDoBotao.status === 'PAGA' || cobrancaDoBotao.status === 'CANCELADA')) {
+      await this.whatsapp.send({
+        destination: phone,
+        body: cobrancaDoBotao.status === 'PAGA'
+          ? 'Esta cobrança já consta como paga. Obrigado!'
+          : 'Esta cobrança foi cancelada e não precisa ser paga.',
+      });
+      return;
+    }
+    if (cobrancaDoBotao) text = botao![1] === 'PIX' ? '1' : '2';
+
+    let conversation = cobrancaDoBotao
+      ? await this.prisma.conversation.findFirst({
+          where: { chargeId: cobrancaDoBotao.id, stage: { not: 'ENCERRADA' } },
+          orderBy: { createdAt: 'desc' },
+          include: { messages: { orderBy: { createdAt: 'asc' } } },
+        })
+      : await this.prisma.conversation.findFirst({
+          where: { clientId: { in: clientes.map((c) => c.id) }, stage: { not: 'ENCERRADA' } },
+          orderBy: [{ lastOutboundAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
+          include: { messages: { orderBy: { createdAt: 'asc' } } },
+        });
+    if (!conversation && cobrancaDoBotao) {
+      conversation = await this.prisma.conversation.create({
+        data: { clientId: cobrancaDoBotao.clientId, chargeId: cobrancaDoBotao.id, stage: 'INICIADA' },
+        include: { messages: true },
+      });
+    }
+    const client = clientes.find((c) => c.id === (conversation?.clientId ?? cobrancaDoBotao?.clientId)) ?? clientes[0];
 
     if (!conversation) {
       const openCharge = await this.prisma.charge.findFirst({
@@ -176,12 +205,14 @@ export class ConversationsService {
     }
     if (charge && (opcao === '2' || /boleto/i.test(text.trim()))) {
       let mensagens: string[];
+      let pdfLink: string | undefined;
       if (!charge.paymentLink) {
         mensagens = ['O boleto desta cobrança ainda não está disponível. Assim que for emitido, ele será enviado por aqui.'];
       } else {
         // Boleto vencido: gera a segunda via com o valor atualizado (o PDF do
         // boleto vencido mostra o valor original).
         const { charge: c, valor, atualizado } = await this.boletos.gerarSegundaViaAtualizada(charge, client);
+        pdfLink = c.paymentLink ?? undefined;
         const vencido = valor.diasAtraso > 0;
         let cabecalho: string;
         if (!vencido) {
@@ -205,6 +236,15 @@ export class ConversationsService {
           : [cabecalho];
       }
       if (telefoneCompartilhado) mensagens[0] = `*${client.name}*\n${mensagens[0]}`;
+      if (pdfLink) {
+        // PDF do boleto como arquivo no WhatsApp (o link continua no texto, caso falhe).
+        try {
+          await this.whatsapp.sendDocument(phone, pdfLink, `Boleto CECIM - ${client.name}.pdf`.replace(/[\\/:*?"<>|]/g, ''));
+          await this.logMessage(conversation.id, 'OUTBOUND', `[PDF do boleto] ${pdfLink}`);
+        } catch (error: any) {
+          this.logger.warn(`Não foi possível enviar o PDF do boleto para ${client.name}: ${error.message}`);
+        }
+      }
       await this.enviarEmSequencia(conversation.id, phone, mensagens);
       await this.prisma.conversation.update({
         where: { id: conversation.id },

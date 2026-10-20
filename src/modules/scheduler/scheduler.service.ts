@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { boletoNoPrazo } from '../notifications/notifications.service';
 import { hojeSaoPaulo } from '../boletos/boletos.service';
-import { buildTemplateContext, parametrosDoModelo } from '../notifications/utils/template-renderer.util';
+import { buildTemplateContext, parametrosDoModelo, payloadsDosBotoes } from '../notifications/utils/template-renderer.util';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -125,6 +125,7 @@ export class SchedulerService {
           body: resumo,
           providerTemplateName: nomeModelo,
           templateParams: params,
+          templateButtonPayloads: modelo?.providerBotoes?.length ? payloadsDosBotoes(modelo.providerBotoes, conv.chargeId!) : undefined,
         });
         await this.prisma.conversationMessage.create({
           data: { conversationId: conv.id, direction: 'OUTBOUND', channel: 'WHATSAPP', content: resumo },

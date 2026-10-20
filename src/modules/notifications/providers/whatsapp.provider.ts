@@ -10,6 +10,16 @@ import { ChannelProvider, ChannelSendInput, ChannelSendResult } from '../interfa
  * mensagem pré-aprovado (providerTemplateName). Dentro da janela, é possível
  * enviar texto livre.
  */
+/** Componentes do template: variáveis do corpo e payload de cada botão de resposta rápida. */
+export function montarComponentesTemplate(params?: string[], payloads?: string[]) {
+  const componentes: any[] = [];
+  if (params?.length) componentes.push({ type: 'body', parameters: params.map((text) => ({ type: 'text', text })) });
+  (payloads ?? []).forEach((payload, i) =>
+    componentes.push({ type: 'button', sub_type: 'quick_reply', index: String(i), parameters: [{ type: 'payload', payload }] }),
+  );
+  return componentes.length ? componentes : undefined;
+}
+
 @Injectable()
 export class WhatsAppProvider implements ChannelProvider {
   readonly channel = 'WHATSAPP' as const;
@@ -48,14 +58,7 @@ export class WhatsAppProvider implements ChannelProvider {
           template: {
             name: templateName,
             language: { code: input.templateLanguage ?? this.config.get<string>('whatsapp.templateLanguage') },
-            components: input.templateParams?.length
-              ? [
-                  {
-                    type: 'body',
-                    parameters: input.templateParams.map((text) => ({ type: 'text', text })),
-                  },
-                ]
-              : undefined,
+            components: montarComponentesTemplate(input.templateParams, input.templateButtonPayloads),
           },
         }
       : {
@@ -93,6 +96,25 @@ export class WhatsAppProvider implements ChannelProvider {
    * app - sem essa chamada, mensagens reais de clientes não chegam no
    * nosso webhook mesmo com o campo aparecendo "Assinado".
    */
+  /** Envia um arquivo (ex: PDF do boleto) por link público - só dentro da janela de 24h. */
+  async sendDocument(destination: string, link: string, filename: string, caption?: string): Promise<ChannelSendResult> {
+    const accessToken = this.config.get<string>('whatsapp.accessToken');
+    if (!accessToken) throw new Error('WhatsApp não configurado: defina WHATSAPP_ACCESS_TOKEN');
+    const response = await fetch(this.apiUrl, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: destination.replace('+', ''),
+        type: 'document',
+        document: { link, filename, ...(caption ? { caption } : {}) },
+      }),
+    });
+    const data = (await response.json().catch(() => ({}))) as any;
+    if (!response.ok) throw new Error(data?.error?.message ?? `Falha HTTP ${response.status} ao enviar documento`);
+    return { providerMessageId: data?.messages?.[0]?.id ?? `whatsapp-doc-${Date.now()}`, raw: data };
+  }
+
   private graph(path: string, init: RequestInit = {}) {
     const accessToken = this.config.get<string>('whatsapp.accessToken');
     const version = this.config.get<string>('whatsapp.apiVersion');
@@ -108,7 +130,7 @@ export class WhatsAppProvider implements ChannelProvider {
   }
 
   /** Envia um modelo de mensagem (categoria Utilidade, pt_BR) para aprovação da Meta. */
-  async criarModeloMeta(nome: string, texto: string, exemplos: string[]): Promise<{ id: string; status: string }> {
+  async criarModeloMeta(nome: string, texto: string, exemplos: string[], botoes: string[] = []): Promise<{ id: string; status: string }> {
     const waba = this.config.get<string>('whatsapp.businessAccountId');
     if (!waba) throw new Error('Defina WHATSAPP_BUSINESS_ACCOUNT_ID no Render para enviar modelos à Meta.');
     return this.graph(`${waba}/message_templates`, {
@@ -117,7 +139,10 @@ export class WhatsAppProvider implements ChannelProvider {
         name: nome,
         language: this.config.get<string>('whatsapp.templateLanguage') ?? 'pt_BR',
         category: 'UTILITY',
-        components: [{ type: 'BODY', text: texto, ...(exemplos.length ? { example: { body_text: [exemplos] } } : {}) }],
+        components: [
+          { type: 'BODY', text: texto, ...(exemplos.length ? { example: { body_text: [exemplos] } } : {}) },
+          ...(botoes.length ? [{ type: 'BUTTONS', buttons: botoes.map((text) => ({ type: 'QUICK_REPLY', text })) }] : []),
+        ],
       }),
     });
   }
