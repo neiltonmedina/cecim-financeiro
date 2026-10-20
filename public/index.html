@@ -840,6 +840,7 @@ async function createClient() {
     return;
   }
   const editando = editingClientId;
+  let salvo = null;
   const body = {
     name,
     document: document.getElementById('client-document').value.trim() || undefined,
@@ -854,11 +855,9 @@ async function createClient() {
     whatsappOptIn: true,
   };
   try {
-    if (editando) {
-      await api('/clients/' + editando, { method: 'PATCH', body: JSON.stringify(body) });
-    } else {
-      await api('/clients', { method: 'POST', body: JSON.stringify(body) });
-    }
+    salvo = editando
+      ? await api('/clients/' + editando, { method: 'PATCH', body: JSON.stringify(body) })
+      : await api('/clients', { method: 'POST', body: JSON.stringify(body) });
   } catch (e) {
     msgEl.style.color = 'var(--red)';
     msgEl.textContent = 'Erro ao salvar: ' + e.message;
@@ -892,8 +891,9 @@ async function createClient() {
   }
 
   cancelarEdicaoCliente();
-  msgEl.style.color = 'var(--green)';
-  msgEl.textContent = editando ? 'Cliente atualizado com sucesso!' : 'Cliente cadastrado com sucesso!';
+  msgEl.style.color = salvo?.aviso ? '#8a5a12' : 'var(--green)';
+  msgEl.textContent = (editando ? 'Cliente atualizado com sucesso!' : 'Cliente cadastrado com sucesso!') +
+    (salvo?.aviso ? ' ⚠️ ' + salvo.aviso : '');
   loadClients();
 }
 

@@ -3,7 +3,7 @@ import { ConversationsService } from './conversations.service';
 function setup() {
   const prisma: any = {
     processedWhatsAppMessage: { create: jest.fn().mockResolvedValue({}) },
-    client: { findFirst: jest.fn().mockResolvedValue(null) },
+    client: { findMany: jest.fn().mockResolvedValue([]) },
   };
   const whatsapp: any = { send: jest.fn() };
   const service = new ConversationsService(prisma, whatsapp, {} as any, {} as any, {} as any, {} as any);
@@ -18,7 +18,7 @@ describe('ConversationsService - entregas duplicadas da Meta', () => {
     await service.handleInboundWhatsApp('5599991646386', 'oi', 'wamid.DUPLICADA');
 
     // Parou antes de qualquer processamento (nem buscou o cliente).
-    expect(prisma.client.findFirst).not.toHaveBeenCalled();
+    expect(prisma.client.findMany).not.toHaveBeenCalled();
   });
 
   it('processa normalmente a primeira entrega de uma mensagem', async () => {
@@ -27,7 +27,7 @@ describe('ConversationsService - entregas duplicadas da Meta', () => {
     await service.handleInboundWhatsApp('5599991646386', 'oi', 'wamid.NOVA');
 
     expect(prisma.processedWhatsAppMessage.create).toHaveBeenCalledWith({ data: { id: 'wamid.NOVA' } });
-    expect(prisma.client.findFirst).toHaveBeenCalled();
+    expect(prisma.client.findMany).toHaveBeenCalled();
   });
 });
 
@@ -43,9 +43,9 @@ describe('ConversationsService - opções 1 (Pix) e 2 (boleto)', () => {
   function setupConversa() {
     const prisma: any = {
       processedWhatsAppMessage: { create: jest.fn().mockResolvedValue({}) },
-      client: { findFirst: jest.fn().mockResolvedValue({ id: 'cli-1', name: 'Cliente' }) },
+      client: { findMany: jest.fn().mockResolvedValue([{ id: 'cli-1', name: 'Cliente' }]) },
       conversation: {
-        findFirst: jest.fn().mockResolvedValue({ id: 'conv-1', chargeId: 'charge-1', messages: [] }),
+        findFirst: jest.fn().mockResolvedValue({ id: 'conv-1', clientId: 'cli-1', chargeId: 'charge-1', messages: [] }),
         update: jest.fn(),
       },
       charge: { findUnique: jest.fn().mockResolvedValue(charge) },
@@ -87,9 +87,9 @@ describe('ConversationsService - opção 2 com boleto vencido', () => {
     const novo = { ...original, linhaDigitavel: 'LINHA-NOVA' };
     const prisma: any = {
       processedWhatsAppMessage: { create: jest.fn().mockResolvedValue({}) },
-      client: { findFirst: jest.fn().mockResolvedValue({ id: 'cli-1', name: 'Cliente' }) },
+      client: { findMany: jest.fn().mockResolvedValue([{ id: 'cli-1', name: 'Cliente' }]) },
       conversation: {
-        findFirst: jest.fn().mockResolvedValue({ id: 'conv-1', chargeId: 'charge-1', messages: [] }),
+        findFirst: jest.fn().mockResolvedValue({ id: 'conv-1', clientId: 'cli-1', chargeId: 'charge-1', messages: [] }),
         update: jest.fn(),
       },
       charge: { findUnique: jest.fn().mockResolvedValue(original) },
@@ -137,5 +137,35 @@ describe('ConversationsService.ensureConversationForCharge - intervalo da régua
     expect((await a.service.ensureConversationForCharge('cli', 'ch', 7)).intervalDays).toBe(7);
     const b = setup(null);
     expect((await b.service.ensureConversationForCharge('cli', 'ch')).intervalDays).toBe(5);
+  });
+});
+
+describe('ConversationsService - mesmo WhatsApp para duas empresas', () => {
+  it('responde pela empresa da conversa com envio mais recente e põe o nome dela no topo', async () => {
+    const prisma: any = {
+      processedWhatsAppMessage: { create: jest.fn().mockResolvedValue({}) },
+      client: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'a', name: 'CONSTRUMAQ' },
+          { id: 'b', name: 'DRAT ENGENHARIA' },
+        ]),
+      },
+      conversation: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'conv-b', clientId: 'b', chargeId: 'ch-b', messages: [] }),
+        update: jest.fn(),
+      },
+      charge: { findUnique: jest.fn().mockResolvedValue({ id: 'ch-b', pixCopiaECola: 'PIX-DA-DRAT' }) },
+      conversationMessage: { create: jest.fn() },
+    };
+    const whatsapp: any = { send: jest.fn().mockResolvedValue({}) };
+    const service = new ConversationsService(prisma, whatsapp, {} as any, {} as any, {} as any, {} as any);
+
+    await service.handleInboundWhatsApp('5594988060316', '1', 'wamid.x');
+
+    const busca = prisma.conversation.findFirst.mock.calls[0][0];
+    expect(busca.where.clientId.in).toEqual(['a', 'b']);
+    expect(busca.orderBy[0]).toEqual({ lastOutboundAt: { sort: 'desc', nulls: 'last' } });
+    expect(whatsapp.send.mock.calls[0][0].body.startsWith('*DRAT ENGENHARIA*')).toBe(true);
+    expect(whatsapp.send.mock.calls[1][0].body).toBe('PIX-DA-DRAT');
   });
 });

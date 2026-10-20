@@ -102,22 +102,26 @@ export class ConversationsService {
     const phone = normalizePhone(fromPhoneRaw);
     const altPhone = alternativeBrPhone(phone);
 
-    const client = await this.prisma.client.findFirst({
+    const clientes = await this.prisma.client.findMany({
       where: {
         active: true,
         ...(altPhone ? { phoneE164: { in: [phone, altPhone] } } : { phoneE164: phone }),
       },
     });
-    if (!client) {
+    if (!clientes.length) {
       this.logger.warn(`Mensagem recebida de número não cadastrado: ${phone}`);
       return;
     }
+    // Mesmo WhatsApp para mais de uma empresa (mesmo dono): a resposta vale para a
+    // conversa que recebeu cobrança mais recentemente.
+    const telefoneCompartilhado = clientes.length > 1;
 
     let conversation = await this.prisma.conversation.findFirst({
-      where: { clientId: client.id, stage: { not: 'ENCERRADA' } },
-      orderBy: { createdAt: 'desc' },
+      where: { clientId: { in: clientes.map((c) => c.id) }, stage: { not: 'ENCERRADA' } },
+      orderBy: [{ lastOutboundAt: { sort: 'desc', nulls: 'last' } }, { createdAt: 'desc' }],
       include: { messages: { orderBy: { createdAt: 'asc' } } },
     });
+    const client = clientes.find((c) => c.id === conversation?.clientId) ?? clientes[0];
 
     if (!conversation) {
       const openCharge = await this.prisma.charge.findFirst({
@@ -162,6 +166,7 @@ export class ConversationsService {
             charge.pixCopiaECola,
           ]
         : ['No momento não temos um Pix disponível para essa cobrança - posso te enviar o boleto atualizado (opção 2)?'];
+      if (telefoneCompartilhado) mensagens[0] = `*${client.name}*\n${mensagens[0]}`;
       await this.enviarEmSequencia(conversation.id, phone, mensagens);
       await this.prisma.conversation.update({
         where: { id: conversation.id },
@@ -199,6 +204,7 @@ export class ConversationsService {
             ]
           : [cabecalho];
       }
+      if (telefoneCompartilhado) mensagens[0] = `*${client.name}*\n${mensagens[0]}`;
       await this.enviarEmSequencia(conversation.id, phone, mensagens);
       await this.prisma.conversation.update({
         where: { id: conversation.id },
