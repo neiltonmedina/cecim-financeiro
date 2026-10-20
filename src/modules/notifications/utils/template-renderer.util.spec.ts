@@ -74,7 +74,8 @@ describe('formatDateBR - vencimento sem voltar um dia', () => {
 
 describe('botões Pix e Boleto', () => {
   it('cada botão leva o id da cobrança no payload', () => {
-    expect(payloadsDosBotoes(BOTOES_COBRANCA, 'c1')).toEqual(['PIX:c1', 'BOLETO:c1']);
+    expect(payloadsDosBotoes(BOTOES_COBRANCA.BOLETO_DISPONIVEL, 'c1')).toEqual(['PIX:c1', 'BOLETO:c1']);
+    expect(payloadsDosBotoes(BOTOES_COBRANCA.COBRANCA_PENDENTE, 'c1')).toEqual(['PIX:c1', 'BOLETO:c1']);
   });
 
   it('monta os componentes do modelo com corpo e botões', () => {

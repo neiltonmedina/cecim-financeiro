@@ -56,12 +56,20 @@ export const VARIAVEIS_MODELO: Record<string, string> = {
   descricao: 'Mensalidade 10/2026',
 };
 
-/** Botões de resposta rápida dos modelos de cobrança (a vencer / vencido). */
-export const BOTOES_COBRANCA = ['Pix', 'Boleto'];
+/** Botões de resposta rápida de cada modelo de cobrança. */
+export const BOTOES_COBRANCA: Record<string, string[]> = {
+  BOLETO_DISPONIVEL: ['Pix', 'Boleto'],
+  COBRANCA_PENDENTE: ['Pix Copia e Cola', 'Novo Boleto'],
+};
+
+/** Rodapé (texto cinza acima dos botões) de cada modelo de cobrança. */
+export const RODAPE_COBRANCA: Record<string, string> = {
+  COBRANCA_PENDENTE: 'Caso o pagamento já tenha sido realizado, desconsidere.',
+};
 
 /** Payload de cada botão: identifica a ação e a cobrança exata (ex: "PIX:<id>"). */
 export function payloadsDosBotoes(botoes: string[], chargeId: string): string[] {
-  return botoes.map((b) => `${b.toUpperCase()}:${chargeId}`);
+  return botoes.map((b) => `${/pix/i.test(b) ? 'PIX' : 'BOLETO'}:${chargeId}`);
 }
 
 /** Valores dos {{1}}, {{2}}... do modelo, na ordem gravada em providerParams. */

@@ -130,7 +130,7 @@ export class WhatsAppProvider implements ChannelProvider {
   }
 
   /** Envia um modelo de mensagem (categoria Utilidade, pt_BR) para aprovação da Meta. */
-  async criarModeloMeta(nome: string, texto: string, exemplos: string[], botoes: string[] = []): Promise<{ id: string; status: string }> {
+  async criarModeloMeta(nome: string, texto: string, exemplos: string[], botoes: string[] = [], rodape?: string): Promise<{ id: string; status: string }> {
     const waba = this.config.get<string>('whatsapp.businessAccountId');
     if (!waba) throw new Error('Defina WHATSAPP_BUSINESS_ACCOUNT_ID no Render para enviar modelos à Meta.');
     return this.graph(`${waba}/message_templates`, {
@@ -141,6 +141,7 @@ export class WhatsAppProvider implements ChannelProvider {
         category: 'UTILITY',
         components: [
           { type: 'BODY', text: texto, ...(exemplos.length ? { example: { body_text: [exemplos] } } : {}) },
+          ...(rodape ? [{ type: 'FOOTER', text: rodape }] : []),
           ...(botoes.length ? [{ type: 'BUTTONS', buttons: botoes.map((text) => ({ type: 'QUICK_REPLY', text })) }] : []),
         ],
       }),
