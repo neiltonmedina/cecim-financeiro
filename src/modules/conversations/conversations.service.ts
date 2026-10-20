@@ -6,7 +6,7 @@ import { WhatsAppProvider } from '../notifications/providers/whatsapp.provider';
 import { EmailSmtpProvider } from '../notifications/providers/email-smtp.provider';
 import { ClaudeAgentService, filtrarRespostaDoAgente } from './claude-agent.service';
 import { BoletosService } from '../boletos/boletos.service';
-import { formatCurrencyBRL } from '../notifications/utils/template-renderer.util';
+import { buildTemplateContext, formatCurrencyBRL, formatDateBR, parametrosDoModelo } from '../notifications/utils/template-renderer.util';
 
 function normalizePhone(raw: string): string {
   const digits = raw.replace(/[^\d]/g, '');
@@ -86,6 +86,67 @@ export class ConversationsService {
     }
     if (conversations.length) {
       this.logger.log(`${conversations.length} conversa(s) encerrada(s) automaticamente por pagamento confirmado.`);
+    }
+  }
+
+  /**
+   * Registra o pagamento (uma vez só, mesmo que o aviso chegue repetido), encerra
+   * a régua e agradece pelo WhatsApp quem recebeu a cobrança por lá.
+   */
+  async registrarPagamento(chargeId: string, valorRecebidoCents?: number): Promise<boolean> {
+    const { count } = await this.prisma.charge.updateMany({
+      where: { id: chargeId, status: { not: 'PAGA' } },
+      data: { status: 'PAGA', paidAt: new Date() },
+    });
+    if (!count) return false;
+    const contatado = (await this.prisma.conversation.count({ where: { chargeId } })) > 0;
+    await this.encerrarPorPagamento(chargeId);
+    if (contatado) await this.enviarConfirmacaoPagamento(chargeId, valorRecebidoCents);
+    return true;
+  }
+
+  /** Consulta no Inter os boletos pagos e registra cada pagamento. */
+  async sincronizarPagamentosInter(): Promise<number> {
+    let registrados = 0;
+    for (const { chargeId, valorRecebidoCents } of await this.boletos.cobrancasPagasNoInter()) {
+      if (await this.registrarPagamento(chargeId, valorRecebidoCents)) registrados++;
+    }
+    if (registrados) this.logger.log(`${registrados} pagamento(s) confirmado(s) pelo Inter.`);
+    return registrados;
+  }
+
+  private async enviarConfirmacaoPagamento(chargeId: string, valorRecebidoCents?: number) {
+    const modelo = await this.prisma.messageTemplate.findFirst({
+      where: { channel: 'WHATSAPP', type: 'CONFIRMACAO_PAGAMENTO', active: true },
+    });
+    if (!modelo?.providerTemplateName) {
+      this.logger.log(`Cobrança ${chargeId} paga - agradecimento não enviado (modelo ainda não aprovado pela Meta).`);
+      return;
+    }
+    const charge = await this.prisma.charge.findUnique({ where: { id: chargeId }, include: { client: true } });
+    if (!charge?.client.phoneE164) return;
+    const contexto = {
+      ...buildTemplateContext(charge.client, charge, ''),
+      // Referente ao vencimento original e ao valor que de fato foi pago.
+      vencimentoBoleto: formatDateBR(charge.dueDate),
+      valor: formatCurrencyBRL(valorRecebidoCents || charge.amountCents),
+    };
+    const resumo = `[Pagamento confirmado - modelo ${modelo.providerTemplateName}] ${charge.client.name}: ${contexto.valor}`;
+    try {
+      await this.whatsapp.send({
+        destination: charge.client.phoneE164,
+        body: resumo,
+        providerTemplateName: modelo.providerTemplateName,
+        templateParams: parametrosDoModelo(modelo.providerParams, contexto),
+      });
+      const conv = await this.prisma.conversation.findFirst({ where: { chargeId }, orderBy: { createdAt: 'desc' } });
+      if (conv) {
+        await this.prisma.conversationMessage.create({
+          data: { conversationId: conv.id, direction: 'OUTBOUND', channel: 'WHATSAPP', content: resumo },
+        });
+      }
+    } catch (error: any) {
+      this.logger.warn(`Falha ao enviar o agradecimento de pagamento da cobrança ${chargeId}: ${error.message}`);
     }
   }
 

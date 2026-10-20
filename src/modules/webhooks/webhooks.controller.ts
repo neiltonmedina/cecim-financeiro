@@ -159,10 +159,8 @@ export class WebhooksController {
         this.logger.warn(`Webhook do Inter recebido para cobrança desconhecida: ${codigoSolicitacao}`);
         continue;
       }
-      if (charge.status === 'PAGA') continue; // já processado antes
-
-      await this.prisma.charge.update({ where: { id: charge.id }, data: { status: 'PAGA', paidAt: new Date() } });
-      await this.conversations.encerrarPorPagamento(charge.id);
+      const valorRecebido = Number(evento?.valorTotalRecebido ?? evento?.cobranca?.valorTotalRecebido ?? 0);
+      if (!(await this.conversations.registrarPagamento(charge.id, Math.round(valorRecebido * 100) || undefined))) continue; // já processado antes
       this.logger.log(`Cobrança ${charge.id} marcada como PAGA via webhook do Inter (${situacao}).`);
     }
     return { received: true };

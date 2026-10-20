@@ -143,9 +143,8 @@ export class ChargesService {
 
   async markAsPaid(id: string) {
     await this.findOne(id);
-    const charge = await this.prisma.charge.update({ where: { id }, data: { status: 'PAGA', paidAt: new Date() } });
-    await this.conversationsService.encerrarPorPagamento(id);
-    return charge;
+    await this.conversationsService.registrarPagamento(id);
+    return this.findOne(id);
   }
 
   /**

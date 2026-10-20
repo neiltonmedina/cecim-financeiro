@@ -34,6 +34,7 @@ export function traduzirErroInter(error: any): string {
 
 /** Situações do Inter que ainda podem ser cobradas. */
 const SITUACOES_EM_ABERTO = ['A_RECEBER', 'ATRASADO'];
+export const SITUACOES_PAGAS = ['RECEBIDO', 'MARCADO_RECEBIDO', 'PAGO', 'LIQUIDADO'];
 
 const soDigitos = (v: unknown) => String(v ?? '').replace(/\D/g, '');
 
@@ -47,6 +48,7 @@ function lerCobrancaInter(item: any) {
     seuNumero: c.seuNumero ?? '',
     situacao: c.situacao ?? '',
     valorCents: Math.round(Number(c.valorNominal ?? 0) * 100),
+    valorRecebidoCents: Math.round(Number(c.valorTotalRecebido ?? 0) * 100),
     vencimento: String(c.dataVencimento ?? '').slice(0, 10),
     nome: pagador.nome ?? '',
     documento: soDigitos(pagador.cpfCnpj),
@@ -189,6 +191,29 @@ export class BoletosService {
       this.logger.warn(`Não foi possível completar linha digitável da cobrança ${charge.id}: ${error.message}`);
       return charge;
     }
+  }
+
+  /**
+   * Cobranças em aberto no painel cujo boleto já consta como pago no Inter -
+   * não depende do webhook do Inter estar cadastrado. Devolve o valor recebido
+   * (com multa/juros, se pago atrasado).
+   */
+  async cobrancasPagasNoInter(): Promise<{ chargeId: string; valorRecebidoCents?: number }[]> {
+    if (!this.inter.isConfigured()) return [];
+    const abertas = await this.prisma.charge.findMany({
+      where: { status: { in: ['PENDENTE', 'ENVIADA', 'VENCIDA'] }, boletoCodigoSolicitacao: { not: null } },
+      select: { id: true, boletoCodigoSolicitacao: true },
+    });
+    const pagas: { chargeId: string; valorRecebidoCents?: number }[] = [];
+    for (const c of abertas) {
+      try {
+        const b = lerCobrancaInter(await this.inter.consultarBruto(c.boletoCodigoSolicitacao!));
+        if (SITUACOES_PAGAS.includes(b.situacao)) pagas.push({ chargeId: c.id, valorRecebidoCents: b.valorRecebidoCents || undefined });
+      } catch (error: any) {
+        this.logger.warn(`Não foi possível consultar o boleto ${c.boletoCodigoSolicitacao} no Inter: ${error.message}`);
+      }
+    }
+    return pagas;
   }
 
   /** Cancela (baixa) o boleto no Inter. Lança erro traduzido se o Inter recusar. */

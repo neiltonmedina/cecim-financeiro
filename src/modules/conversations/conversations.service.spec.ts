@@ -228,3 +228,55 @@ describe('ConversationsService - botões Pix e Boleto', () => {
     expect(whatsapp.send.mock.calls[0][0].body).toContain('paga');
   });
 });
+
+describe('ConversationsService.registrarPagamento - agradecimento', () => {
+  function setupPagamento({ jaPaga = false, contatado = true, modelo = { providerTemplateName: 'pagamento_confirmado_cecim_1', providerParams: ['cliente', 'vencimentoBoleto', 'valor'] } as any } = {}) {
+    const charge = {
+      id: 'c1', amountCents: 500, dueDate: new Date('2026-10-15T00:00:00Z'), description: 'Mensalidade',
+      client: { id: 'cli', name: 'Neilton', phoneE164: '+5599991646386' },
+    };
+    const prisma: any = {
+      charge: { updateMany: jest.fn().mockResolvedValue({ count: jaPaga ? 0 : 1 }), findUnique: jest.fn().mockResolvedValue(charge) },
+      conversation: {
+        count: jest.fn().mockResolvedValue(contatado ? 1 : 0),
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue({ id: 'conv' }),
+        update: jest.fn(),
+      },
+      messageTemplate: { findFirst: jest.fn().mockResolvedValue(modelo) },
+      conversationMessage: { create: jest.fn() },
+    };
+    const whatsapp: any = { send: jest.fn().mockResolvedValue({}) };
+    const service = new ConversationsService(prisma, whatsapp, {} as any, {} as any, {} as any, {} as any);
+    return { service, whatsapp };
+  }
+
+  it('agradece com o vencimento original e o valor efetivamente pago', async () => {
+    const { service, whatsapp } = setupPagamento();
+    expect(await service.registrarPagamento('c1', 517)).toBe(true);
+
+    const enviado = whatsapp.send.mock.calls[0][0];
+    expect(enviado.providerTemplateName).toBe('pagamento_confirmado_cecim_1');
+    expect(enviado.templateParams[0]).toBe('Neilton');
+    expect(enviado.templateParams[1]).toBe('15/10/2026');
+    expect(enviado.templateParams[2]).toMatch(/R\$\s5,17/);
+  });
+
+  it('não agradece duas vezes o mesmo pagamento', async () => {
+    const { service, whatsapp } = setupPagamento({ jaPaga: true });
+    expect(await service.registrarPagamento('c1')).toBe(false);
+    expect(whatsapp.send).not.toHaveBeenCalled();
+  });
+
+  it('não manda nada para quem não recebeu a cobrança pelo WhatsApp', async () => {
+    const { service, whatsapp } = setupPagamento({ contatado: false });
+    await service.registrarPagamento('c1');
+    expect(whatsapp.send).not.toHaveBeenCalled();
+  });
+
+  it('não manda nada enquanto o modelo não for aprovado pela Meta', async () => {
+    const { service, whatsapp } = setupPagamento({ modelo: null });
+    await service.registrarPagamento('c1');
+    expect(whatsapp.send).not.toHaveBeenCalled();
+  });
+});

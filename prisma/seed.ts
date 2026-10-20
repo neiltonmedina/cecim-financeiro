@@ -39,6 +39,16 @@ const DEFAULT_TEMPLATES: Array<{
   },
   {
     channel: Channel.WHATSAPP,
+    type: TemplateType.CONFIRMACAO_PAGAMENTO,
+    name: 'WhatsApp - Pagamento confirmado',
+    // Rascunho - editado e enviado para aprovação da Meta pelo painel; inativo até aprovar.
+    body:
+      'Olá, {{cliente}}! 😊\n\nConfirmamos o recebimento do pagamento da *CECIM Assessoria Contábil* ' +
+      'referente ao vencimento de *{{vencimentoBoleto}}*, no valor de *{{valor}}*.\n\nAgradecemos pela confiança e pela pontualidade!',
+    active: false,
+  },
+  {
+    channel: Channel.WHATSAPP,
     type: TemplateType.LEMBRETE_VENCIMENTO,
     name: 'WhatsApp - Lembrete de vencimento',
     body:

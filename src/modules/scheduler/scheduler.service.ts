@@ -6,6 +6,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { WhatsAppProvider } from '../notifications/providers/whatsapp.provider';
+import { ConversationsService } from '../conversations/conversations.service';
 
 function startOfDay(date: Date): Date {
   const d = new Date(date);
@@ -27,6 +28,7 @@ export class SchedulerService {
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
     private readonly whatsapp: WhatsAppProvider,
+    private readonly conversations: ConversationsService,
   ) {}
 
   /**
@@ -40,6 +42,8 @@ export class SchedulerService {
   @Cron(CronExpression.EVERY_DAY_AT_8AM, { timeZone: 'America/Sao_Paulo' })
   async runDailyReminders() {
     this.logger.log('Executando rotina diária de manutenção...');
+    // Antes da régua: quem já pagou não recebe lembrete de atraso.
+    await this.conversations.sincronizarPagamentosInter().catch((e) => this.logger.error(`Falha ao consultar pagamentos no Inter: ${e.message}`));
     await this.markOverdueCharges();
     await this.advanceStaleConversations();
   }
