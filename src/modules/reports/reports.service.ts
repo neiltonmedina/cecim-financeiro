@@ -1,5 +1,16 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
+import { hojeSaoPaulo } from '../boletos/boletos.service';
+
+/** Data (YYYY-MM-DD) de um instante no fuso de São Paulo. */
+function diaSaoPaulo(d: Date): string {
+  return d.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+}
+
+/** Dias corridos entre duas datas YYYY-MM-DD (b - a). */
+function diasEntre(a: string, b: string): number {
+  return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400000);
+}
 
 export interface CobrancaReport {
   periodo: { de: Date; ate: Date };
@@ -186,5 +197,93 @@ export class ReportsService {
       semResposta,
       valorRecuperadoCentavos: valorRecuperado._sum.amountCents ?? 0,
     };
+  }
+
+  /**
+   * Relatório do mês (cobranças com vencimento no mês): resumo, linhas para o
+   * Excel e os clientes que mais atrasam nos últimos 6 meses.
+   */
+  async mensal(mes: string) {
+    const [ano, m] = mes.split('-').map(Number);
+    const de = new Date(Date.UTC(ano, m - 1, 1));
+    const ate = new Date(Date.UTC(ano, m, 1));
+    const hoje = hojeSaoPaulo();
+    const charges = await this.prisma.charge.findMany({
+      where: { status: { not: 'CANCELADA' }, dueDate: { gte: de, lt: ate } },
+      omit: { boletoPdfBase64: true },
+      include: { client: { select: { name: true, document: true } } },
+      orderBy: { dueDate: 'asc' },
+    });
+
+    const linhas = charges.map((c) => {
+      const vencimento = c.dueDate.toISOString().slice(0, 10);
+      const pagoEm = c.paidAt ? diaSaoPaulo(c.paidAt) : null;
+      const diasAtraso = Math.max(0, diasEntre(vencimento, pagoEm ?? (c.status === 'PAGA' ? vencimento : hoje)));
+      const valorPago = c.status === 'PAGA' ? (c.valorPagoCents ?? c.amountCents) : null;
+      return {
+        cliente: c.client.name,
+        documento: c.client.document ?? '',
+        descricao: c.description,
+        vencimento,
+        valorCents: c.amountCents,
+        situacao: c.status === 'PAGA' ? (diasAtraso > 0 ? 'Paga com atraso' : 'Paga em dia') : vencimento < hoje ? 'Em atraso' : 'A vencer',
+        pagoEm,
+        valorPagoCents: valorPago,
+        jurosCents: valorPago !== null ? Math.max(0, valorPago - c.amountCents) : null,
+        diasAtraso,
+      };
+    });
+
+    const soma = (xs: typeof linhas, f: (l: (typeof linhas)[number]) => number) => xs.reduce((t, l) => t + f(l), 0);
+    const pagas = linhas.filter((l) => l.valorPagoCents !== null);
+    const abertas = linhas.filter((l) => l.valorPagoCents === null);
+    const resumo = {
+      mes,
+      quantidade: linhas.length,
+      emitidoCents: soma(linhas, (l) => l.valorCents),
+      recebidoCents: soma(pagas, (l) => l.valorPagoCents!),
+      jurosRecebidosCents: soma(pagas, (l) => l.jurosCents!),
+      emAbertoCents: soma(abertas, (l) => l.valorCents),
+      emAtrasoCents: soma(abertas.filter((l) => l.situacao === 'Em atraso'), (l) => l.valorCents),
+      pagasEmDia: pagas.filter((l) => l.situacao === 'Paga em dia').length,
+      pagasComAtraso: pagas.filter((l) => l.situacao === 'Paga com atraso').length,
+      emAtraso: abertas.filter((l) => l.situacao === 'Em atraso').length,
+      taxaRecebimento: linhas.length ? Math.round((pagas.length / linhas.length) * 100) : 0,
+    };
+
+    return { resumo, linhas, maisAtrasam: await this.clientesQueMaisAtrasam(hoje) };
+  }
+
+  /** Clientes com mais atrasos nos últimos 6 meses (pagos com atraso + em atraso agora). */
+  private async clientesQueMaisAtrasam(hoje: string) {
+    const desde = new Date(`${hoje}T00:00:00.000Z`);
+    desde.setUTCMonth(desde.getUTCMonth() - 6);
+    const charges = await this.prisma.charge.findMany({
+      where: { status: { not: 'CANCELADA' }, dueDate: { gte: desde, lt: new Date(`${hoje}T00:00:00.000Z`) } },
+      select: { clientId: true, dueDate: true, paidAt: true, status: true, amountCents: true, client: { select: { name: true } } },
+    });
+    const porCliente = new Map<string, { cliente: string; cobrancas: number; pagasComAtraso: number; emAtraso: number; emAtrasoCents: number; diasAtraso: number[] }>();
+    for (const c of charges) {
+      const r = porCliente.get(c.clientId) ?? { cliente: c.client.name, cobrancas: 0, pagasComAtraso: 0, emAtraso: 0, emAtrasoCents: 0, diasAtraso: [] };
+      r.cobrancas++;
+      const vencimento = c.dueDate.toISOString().slice(0, 10);
+      if (c.status === 'PAGA') {
+        const dias = c.paidAt ? diasEntre(vencimento, diaSaoPaulo(c.paidAt)) : 0;
+        if (dias > 0) {
+          r.pagasComAtraso++;
+          r.diasAtraso.push(dias);
+        }
+      } else {
+        r.emAtraso++;
+        r.emAtrasoCents += c.amountCents;
+        r.diasAtraso.push(diasEntre(vencimento, hoje));
+      }
+      porCliente.set(c.clientId, r);
+    }
+    return [...porCliente.values()]
+      .filter((r) => r.pagasComAtraso + r.emAtraso > 0)
+      .map(({ diasAtraso, ...r }) => ({ ...r, mediaDiasAtraso: Math.round(diasAtraso.reduce((a, b) => a + b, 0) / diasAtraso.length) }))
+      .sort((a, b) => b.emAtraso + b.pagasComAtraso - (a.emAtraso + a.pagasComAtraso) || b.mediaDiasAtraso - a.mediaDiasAtraso)
+      .slice(0, 15);
   }
 }

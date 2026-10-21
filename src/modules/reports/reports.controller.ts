@@ -22,6 +22,13 @@ export class ReportsController {
     return this.reportsService.ofertasNegociacao();
   }
 
+  /** Relatório do mês (vencimentos no mês) + clientes que mais atrasam. mes = AAAA-MM */
+  @Get('mensal')
+  mensal(@Query('mes') mes?: string) {
+    if (!mes || !/^\d{4}-(0[1-9]|1[0-2])$/.test(mes)) throw new BadRequestException('Informe o mês no formato AAAA-MM.');
+    return this.reportsService.mensal(mes);
+  }
+
   /** Relatório periódico do agente de cobrança: contatados, respostas, acordos, pagamentos, etc. */
   @Get('cobranca')
   cobranca(@Query('from') from?: string, @Query('to') to?: string) {

@@ -99,7 +99,7 @@ export class ConversationsService {
   async registrarPagamento(chargeId: string, valorRecebidoCents?: number): Promise<boolean> {
     const { count } = await this.prisma.charge.updateMany({
       where: { id: chargeId, status: { not: 'PAGA' } },
-      data: { status: 'PAGA', paidAt: new Date() },
+      data: { status: 'PAGA', paidAt: new Date(), valorPagoCents: valorRecebidoCents ?? null },
     });
     if (!count) return false;
     const pago = await this.prisma.charge.findUnique({ where: { id: chargeId }, include: { client: true } });

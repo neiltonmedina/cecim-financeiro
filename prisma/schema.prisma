@@ -84,6 +84,7 @@ model Charge {
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
   paidAt        DateTime?
+  valorPagoCents Int? // valor efetivamente recebido (com multa/juros), quando o Inter informa
   canceledAt    DateTime?
 
   // Boleto emitido via API do Banco Inter (quando configurado)

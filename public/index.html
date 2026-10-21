@@ -526,6 +526,17 @@
 
     <div id="tab-report" class="tab" style="display:none;">
       <div class="card">
+        <div class="card-head"><div><h3>Relatório do mês</h3><div class="hint">Cobranças com vencimento no mês escolhido: recebido, em atraso e quem pagou com juros.</div></div></div>
+        <div class="filters">
+          <label style="align-self:center; font-size:13px; color:var(--muted);">Mês</label>
+          <input id="mensal-mes" type="month" onchange="loadMensal()" />
+          <button class="secondary" onclick="baixarMensalExcel()">⬇ Baixar Excel</button>
+        </div>
+        <div id="mensal-kpis" class="dash-kpis" style="margin-top:12px;"></div>
+        <h4 style="margin:18px 0 6px;">Clientes que mais atrasam <span style="font-weight:400; color:var(--muted); font-size:13px;">(últimos 6 meses)</span></h4>
+        <div id="mensal-atrasam"></div>
+      </div>
+      <div class="card">
         <div class="filters">
           <label style="align-self:center; font-size:13px; color:var(--muted);">De</label>
           <input id="report-from" type="date" />
@@ -704,6 +715,67 @@ async function prepararApp() {
   }
 }
 
+let mensalDados = null;
+
+async function loadMensal() {
+  const mes = document.getElementById('mensal-mes').value;
+  const kpis = document.getElementById('mensal-kpis');
+  const lista = document.getElementById('mensal-atrasam');
+  if (!mes) return;
+  kpis.innerHTML = '<div class="loading">Carregando...</div>';
+  try {
+    mensalDados = await api('/reports/mensal?mes=' + mes);
+  } catch (e) {
+    kpis.innerHTML = '<div class="empty">' + e.message + '</div>';
+    return;
+  }
+  const r = mensalDados.resumo;
+  const tile = (label, valor, sub, cls = '') => `<div class="tile ${cls}"><div class="t-label">${label}</div><div class="t-value">${valor}</div><div class="t-sub">${sub}</div></div>`;
+  kpis.innerHTML =
+    tile('Emitido', fmtMoney(r.emitidoCents), `${r.quantidade} cobrança(s) no mês`) +
+    tile('Recebido', fmtMoney(r.recebidoCents), `${r.pagasEmDia} em dia · ${r.pagasComAtraso} com atraso`, 'good') +
+    tile('Em atraso', fmtMoney(r.emAtrasoCents), `${r.emAtraso} cobrança(s)`, 'critical') +
+    tile('Multa e juros recebidos', fmtMoney(r.jurosRecebidosCents), 'de quem pagou atrasado') +
+    tile('Em aberto', fmtMoney(r.emAbertoCents), 'a vencer + em atraso') +
+    tile('Taxa de recebimento', r.taxaRecebimento + '%', 'cobranças pagas sobre o total');
+  const m = mensalDados.maisAtrasam;
+  lista.innerHTML = !m.length ? '<div class="empty">Nenhum cliente com atraso nos últimos 6 meses. 🎉</div>'
+    : '<div style="overflow-x:auto;"><table><thead><tr><th>Cliente</th><th>Em atraso agora</th><th>Pagas com atraso</th><th>Média de dias</th><th>Valor em atraso</th></tr></thead><tbody>' +
+      m.map((x) => `<tr><td>${escHtml(x.cliente)}</td><td>${x.emAtraso}</td><td>${x.pagasComAtraso} de ${x.cobrancas}</td><td>${x.mediaDiasAtraso} dia(s)</td><td>${x.emAtrasoCents ? fmtMoney(x.emAtrasoCents) : '-'}</td></tr>`).join('') +
+      '</tbody></table></div>';
+}
+
+function baixarMensalExcel() {
+  if (!mensalDados) return;
+  const reais = (c) => (c === null || c === undefined ? '' : c / 100);
+  const data = (iso) => (iso ? iso.split('-').reverse().join('/') : '');
+  const r = mensalDados.resumo;
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([
+    { Item: 'Mês', Valor: r.mes.split('-').reverse().join('/') },
+    { Item: 'Cobranças no mês', Valor: r.quantidade },
+    { Item: 'Emitido (R$)', Valor: reais(r.emitidoCents) },
+    { Item: 'Recebido (R$)', Valor: reais(r.recebidoCents) },
+    { Item: 'Multa e juros recebidos (R$)', Valor: reais(r.jurosRecebidosCents) },
+    { Item: 'Em aberto (R$)', Valor: reais(r.emAbertoCents) },
+    { Item: 'Em atraso (R$)', Valor: reais(r.emAtrasoCents) },
+    { Item: 'Pagas em dia', Valor: r.pagasEmDia },
+    { Item: 'Pagas com atraso', Valor: r.pagasComAtraso },
+    { Item: 'Em atraso', Valor: r.emAtraso },
+    { Item: 'Taxa de recebimento (%)', Valor: r.taxaRecebimento },
+  ]), 'Resumo');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(mensalDados.linhas.map((l) => ({
+    Cliente: l.cliente, 'CPF/CNPJ': l.documento, 'Descrição': l.descricao, Vencimento: data(l.vencimento),
+    'Valor (R$)': reais(l.valorCents), 'Situação': l.situacao, 'Pago em': data(l.pagoEm),
+    'Valor pago (R$)': reais(l.valorPagoCents), 'Multa/juros (R$)': reais(l.jurosCents), 'Dias de atraso': l.diasAtraso || '',
+  }))), 'Cobranças');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(mensalDados.maisAtrasam.map((x) => ({
+    Cliente: x.cliente, 'Em atraso agora': x.emAtraso, 'Pagas com atraso': x.pagasComAtraso, 'Cobranças (6 meses)': x.cobrancas,
+    'Média de dias de atraso': x.mediaDiasAtraso, 'Valor em atraso (R$)': reais(x.emAtrasoCents),
+  }))), 'Clientes que mais atrasam');
+  XLSX.writeFile(wb, `Relatorio CECIM ${r.mes}.xlsx`);
+}
+
 async function verificarAvisoInter() {
   const st = document.getElementById('inter-webhook-status');
   const btn = document.getElementById('inter-webhook-btn');
@@ -802,6 +874,11 @@ function switchTab(name) {
   if (name === 'conversations') loadConversations();
   if (name === 'messages') loadTemplates();
   if (name === 'report') loadOfertas();
+  if (name === 'report') {
+    const mes = document.getElementById('mensal-mes');
+    if (!mes.value) mes.value = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }).slice(0, 7);
+    loadMensal();
+  }
   if (name === 'report' && !document.getElementById('report-from').value) {
     const to = new Date();
     const from = new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
