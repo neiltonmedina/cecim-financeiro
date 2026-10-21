@@ -183,4 +183,49 @@ export class NotificationsService {
     this.logger.log(`Disparo solicitado para ${charges.length} cobrança(s).`);
     return results;
   }
+
+  /**
+   * No dia do vencimento, lembra (com os botões Pix/Boleto) quem já recebeu a
+   * cobrança e ainda não pagou. Só envia com o modelo aprovado pela Meta pelo
+   * painel, uma vez por cobrança, para todos os telefones da empresa.
+   */
+  async lembretesDoDiaDoVencimento(): Promise<number> {
+    const modelo = await this.prisma.messageTemplate.findUnique({
+      where: { channel_type: { channel: Channel.WHATSAPP, type: TemplateType.LEMBRETE_VENCIMENTO } },
+    });
+    if (!modelo?.active || modelo.metaStatus !== 'APPROVED' || !modelo.providerTemplateName) {
+      this.logger.log('Lembrete do dia do vencimento não enviado: modelo ainda não aprovado pela Meta.');
+      return 0;
+    }
+    const hoje = new Date(`${hojeSaoPaulo()}T00:00:00.000Z`);
+    const charges = await this.prisma.charge.findMany({
+      where: {
+        status: 'ENVIADA',
+        OR: [{ boletoDataVencimento: hoje }, { boletoDataVencimento: null, dueDate: hoje }],
+        AND: [{ OR: [{ linhaDigitavel: { not: null } }, { pixCopiaECola: { not: null } }] }],
+        client: { active: true, whatsappOptIn: true },
+        // Uma vez só, e não no mesmo dia de outro envio (ex: disparo feito hoje).
+        notifications: {
+          none: {
+            channel: Channel.WHATSAPP,
+            OR: [{ templateType: TemplateType.LEMBRETE_VENCIMENTO }, { queuedAt: { gte: new Date(Date.now() - 20 * 60 * 60 * 1000) } }],
+          },
+        },
+      },
+      omit: { boletoPdfBase64: true },
+      include: { client: true },
+    });
+    let enviados = 0;
+    for (const charge of charges) {
+      for (const destination of telefonesDoCliente(charge.client)) {
+        const log = await this.prisma.notificationLog.create({
+          data: { chargeId: charge.id, channel: Channel.WHATSAPP, destination, templateType: TemplateType.LEMBRETE_VENCIMENTO, status: 'QUEUED' },
+        });
+        await this.enfileirarOuEnviar(log.id);
+        enviados++;
+      }
+    }
+    if (enviados) this.logger.log(`${enviados} lembrete(s) do dia do vencimento enviado(s).`);
+    return enviados;
+  }
 }

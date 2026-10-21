@@ -46,6 +46,7 @@ export class SchedulerService {
     // Antes da régua: quem já pagou não recebe lembrete de atraso.
     await this.conversations.sincronizarPagamentosInter().catch((e) => this.logger.error(`Falha ao consultar pagamentos no Inter: ${e.message}`));
     await this.markOverdueCharges();
+    await this.notificationsService.lembretesDoDiaDoVencimento().catch((e) => this.logger.error(`Falha no lembrete do dia do vencimento: ${e.message}`));
     await this.advanceStaleConversations();
   }
 
@@ -95,6 +96,11 @@ export class SchedulerService {
 
       const staleThreshold = new Date(conv.lastOutboundAt.getTime() + conv.intervalDays * 24 * 60 * 60 * 1000);
       if (new Date() < staleThreshold) continue; // ainda dentro do intervalo configurado, aguarda
+      // Já recebeu mensagem desta cobrança hoje (ex: lembrete do dia do vencimento): fica para o próximo dia.
+      const enviadaHoje = await this.prisma.notificationLog.findFirst({
+        where: { chargeId: conv.chargeId!, channel: 'WHATSAPP', queuedAt: { gte: new Date(Date.now() - 20 * 60 * 60 * 1000) } },
+      });
+      if (enviadaHoje) continue;
 
       if (conv.stage === 'TERCEIRA_TENTATIVA') {
         await this.prisma.conversation.update({ where: { id: conv.id }, data: { stage: 'ENCERRADA' } });

@@ -1045,6 +1045,7 @@ function previaWhatsApp(textoEditor) {
 }
 const MODELOS_EDITAVEIS = [
   ['BOLETO_DISPONIVEL', 'Boleto a vencer', 'Enviada quando o boleto ainda não venceu (aviso de boleto disponível).'],
+  ['LEMBRETE_VENCIMENTO', 'Vence hoje', 'Enviada no dia do vencimento para quem já recebeu a cobrança e ainda não pagou (uma vez por cobrança).'],
   ['COBRANCA_PENDENTE', 'Boleto vencido', 'Enviada quando o boleto já venceu (cobrança), inclusive nos lembretes da régua.'],
   ['CONFIRMACAO_PAGAMENTO', 'Pagamento confirmado', 'Enviada quando o pagamento é confirmado pelo Inter (ou marcado como pago), para quem recebeu a cobrança pelo WhatsApp.'],
 ];
@@ -1053,12 +1054,13 @@ let modelosCache = {};
 // sozinho, copiável, quando o cliente toca em Pix ou Boleto).
 const SUGESTAO_COM_BOTOES = {
   BOLETO_DISPONIVEL: 'Olá, [nome]! 😊\n\nSeu boleto da *CECIM Assessoria Contábil* já está disponível.\n\n📅 Vencimento: *[vencimento]*\n💰 Valor: *[valor]*\n\nEscolha abaixo a forma de pagamento:',
+  LEMBRETE_VENCIMENTO: 'Olá, [nome]! 😊\n\nPassando para lembrar que o boleto da *CECIM Assessoria Contábil* vence hoje, *[vencimento]*.\n\n💰 Valor: *[valor]*\n\nEscolha abaixo a forma de pagamento:',
   CONFIRMACAO_PAGAMENTO: 'Olá, [nome]! 😊\n\nConfirmamos o recebimento do pagamento da *CECIM Assessoria Contábil* referente ao vencimento de *[vencimento]*, no valor de *[valor]*.\n\nAgradecemos pela confiança e pela pontualidade!',
   COBRANCA_PENDENTE: 'Olá, [nome], como vai?\n\nNotamos que a mensalidade da *CECIM Assessoria Contábil* se encontra em aberto. Sabemos como a correria do dia a dia é intensa, por isso facilitamos para você:\n\n📌 Vencimento: *[vencimento]*\n📌 Valor: *[valor]*\n\nEscolha uma das opções abaixo para receber a cobrança atualizada e evitar novos encargos:',
 };
 // Mesmos botões e rodapé que o servidor envia à Meta (BOTOES_COBRANCA / RODAPE_COBRANCA).
-const BOTOES_MODELO = { BOLETO_DISPONIVEL: ['Pix', 'Boleto'], COBRANCA_PENDENTE: ['Pix Copia e Cola', 'Novo Boleto'], CONFIRMACAO_PAGAMENTO: [] };
-const RODAPE_MODELO = { COBRANCA_PENDENTE: 'Caso o pagamento já tenha sido realizado, desconsidere.' };
+const BOTOES_MODELO = { BOLETO_DISPONIVEL: ['Pix', 'Boleto'], COBRANCA_PENDENTE: ['Pix Copia e Cola', 'Novo Boleto'], LEMBRETE_VENCIMENTO: ['Pix', 'Boleto'], CONFIRMACAO_PAGAMENTO: [] };
+const RODAPE_MODELO = { COBRANCA_PENDENTE: 'Caso o pagamento já tenha sido realizado, desconsidere.', LEMBRETE_VENCIMENTO: 'Caso o pagamento já tenha sido realizado, desconsidere.' };
 const botoesPrevia = (tipo) => !BOTOES_MODELO[tipo].length ? '' : '<div style="display:flex; flex-direction:column; gap:4px; max-width:92%; margin-left:auto; margin-top:4px;">' +
   BOTOES_MODELO[tipo].map((b) => `<div style="background:#fff; border-radius:8px; text-align:center; padding:8px; color:#0a7cff; font-weight:600; font-size:14px; box-shadow:0 1px 1px rgba(0,0,0,.1);">↩ ${b}</div>`).join('') + '</div>';
 
@@ -1075,8 +1077,8 @@ async function loadTemplates() {
       let status;
       if (t.pendenteNome && t.metaStatus === 'PENDING') status = `<span class="pill" style="background:#fdf3e0; color:#8a5a12;">⏳ Nova versão em análise na Meta desde ${fmtDateTime(t.pendenteEnviadoEm)}</span>`;
       else if (t.metaStatus === 'REJECTED') status = `<span class="pill" style="background:var(--red-soft); color:var(--red);">✗ Rejeitada pela Meta: ${escHtml(t.metaMotivo || '')}</span>`;
-      else if (t.active && t.providerTemplateName) status = `<span class="pill" style="background:var(--green-soft); color:var(--green);">✓ Em uso</span>`;
-      else status = `<span class="pill" style="background:#eef1f6; color:var(--muted);">${tipo === 'CONFIRMACAO_PAGAMENTO' ? 'Ainda não aprovada - nenhum agradecimento é enviado até a aprovação' : 'Ainda não aprovada - hoje é usada a mensagem de boleto vencido'}</span>`;
+      else if (t.active && t.providerTemplateName && (tipo !== 'LEMBRETE_VENCIMENTO' || t.metaStatus === 'APPROVED')) status = `<span class="pill" style="background:var(--green-soft); color:var(--green);">✓ Em uso</span>`;
+      else status = `<span class="pill" style="background:#eef1f6; color:var(--muted);">${tipo === 'CONFIRMACAO_PAGAMENTO' ? 'Ainda não aprovada - nenhum agradecimento é enviado até a aprovação' : tipo === 'LEMBRETE_VENCIMENTO' ? 'Ainda não aprovada - o lembrete do dia do vencimento só sai depois da aprovação' : 'Ainda não aprovada - hoje é usada a mensagem de boleto vencido'}</span>`;
       // Ainda sem a versão com botões (e nada em análise): já sugere o texto novo.
       const semBotoes = ((t.providerBotoes || []).join() !== BOTOES_MODELO[tipo].join() || !t.providerTemplateName) && !t.pendenteNome && t.metaStatus !== 'REJECTED';
       const texto = semBotoes && SUGESTAO_COM_BOTOES[tipo]

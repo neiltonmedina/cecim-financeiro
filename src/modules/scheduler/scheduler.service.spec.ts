@@ -30,7 +30,7 @@ function setup(conversations: any[]) {
   };
   const whatsapp: any = { send: jest.fn().mockResolvedValue({ providerMessageId: 'x' }) };
   const conversationsService: any = { sincronizarPagamentosInter: jest.fn().mockResolvedValue(0) };
-  const service = new SchedulerService(prisma, {} as any, whatsapp, conversationsService);
+  const service = new SchedulerService(prisma, { lembretesDoDiaDoVencimento: jest.fn().mockResolvedValue(0) } as any, whatsapp, conversationsService);
   return { service, prisma, whatsapp };
 }
 
@@ -78,7 +78,7 @@ describe('SchedulerService - régua automática', () => {
   it('recupera a data do primeiro envio de conversas antigas (sem lastOutboundAt) e envia o lembrete', async () => {
     const enviadoEm = new Date(Date.now() - 7 * DIA);
     const { service, prisma, whatsapp } = setup([makeConversation({ lastOutboundAt: null, chargeId: 'charge-1' })]);
-    prisma.notificationLog.findFirst.mockResolvedValue({ sentAt: enviadoEm });
+    prisma.notificationLog.findFirst.mockResolvedValueOnce({ sentAt: enviadoEm }).mockResolvedValue(null);
 
     await service.runDailyReminders();
 
@@ -121,5 +121,16 @@ describe('SchedulerService - vários telefones da mesma empresa', () => {
     await service.runDailyReminders();
 
     expect(whatsapp.send.mock.calls.map((c: any) => c[0].destination)).toEqual(['+5599999990000', '+5599999991111']);
+  });
+});
+
+describe('SchedulerService - não manda duas mensagens no mesmo dia', () => {
+  it('pula a régua se a cobrança já recebeu mensagem hoje (ex: lembrete do vencimento)', async () => {
+    const { service, prisma, whatsapp } = setup([makeConversation({ chargeId: 'charge-1' })]);
+    prisma.notificationLog.findFirst.mockResolvedValue({ id: 'log-hoje', queuedAt: new Date() });
+
+    await service.runDailyReminders();
+
+    expect(whatsapp.send).not.toHaveBeenCalled();
   });
 });

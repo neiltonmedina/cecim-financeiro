@@ -60,11 +60,13 @@ export const VARIAVEIS_MODELO: Record<string, string> = {
 export const BOTOES_COBRANCA: Record<string, string[]> = {
   BOLETO_DISPONIVEL: ['Pix', 'Boleto'],
   COBRANCA_PENDENTE: ['Pix Copia e Cola', 'Novo Boleto'],
+  LEMBRETE_VENCIMENTO: ['Pix', 'Boleto'],
 };
 
 /** Rodapé (texto cinza acima dos botões) de cada modelo de cobrança. */
 export const RODAPE_COBRANCA: Record<string, string> = {
   COBRANCA_PENDENTE: 'Caso o pagamento já tenha sido realizado, desconsidere.',
+  LEMBRETE_VENCIMENTO: 'Caso o pagamento já tenha sido realizado, desconsidere.',
 };
 
 /** Payload de cada botão: identifica a ação e a cobrança exata (ex: "PIX:<id>"). */

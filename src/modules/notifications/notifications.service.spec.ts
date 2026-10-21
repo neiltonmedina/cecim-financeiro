@@ -126,3 +126,35 @@ describe('NotificationsService - proteção contra envio repetido', () => {
     expect(processor.enviarNotificacao).not.toHaveBeenCalled();
   });
 });
+
+describe('NotificationsService.lembretesDoDiaDoVencimento', () => {
+  function setup(modelo: any) {
+    const prisma: any = {
+      messageTemplate: { findUnique: jest.fn().mockResolvedValue(modelo) },
+      charge: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'c1', client: { phoneE164: '+5594990000001', telefonesExtras: ['+5594990000002'] } },
+        ]),
+      },
+      notificationLog: { create: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: 'log-' + data.destination })) },
+    };
+    const service = new NotificationsService(prisma, {} as any, {} as any);
+    (service as any).enfileirarOuEnviar = jest.fn();
+    return { service, prisma };
+  }
+
+  it('não envia nada enquanto o modelo não for aprovado pela Meta pelo painel', async () => {
+    const { service, prisma } = setup({ active: true, providerTemplateName: 'lembrete_vencimento_cecim', metaStatus: null });
+    expect(await service.lembretesDoDiaDoVencimento()).toBe(0);
+    expect(prisma.charge.findMany).not.toHaveBeenCalled();
+  });
+
+  it('com o modelo aprovado, lembra todos os telefones da empresa', async () => {
+    const { service, prisma } = setup({ active: true, providerTemplateName: 'vence_hoje_cecim_1', metaStatus: 'APPROVED' });
+    expect(await service.lembretesDoDiaDoVencimento()).toBe(2);
+    expect(prisma.notificationLog.create.mock.calls.map((c: any) => [c[0].data.destination, c[0].data.templateType])).toEqual([
+      ['+5594990000001', 'LEMBRETE_VENCIMENTO'],
+      ['+5594990000002', 'LEMBRETE_VENCIMENTO'],
+    ]);
+  });
+});

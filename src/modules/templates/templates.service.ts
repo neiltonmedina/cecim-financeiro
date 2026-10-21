@@ -11,6 +11,7 @@ const NOME_BASE: Partial<Record<TemplateType, string>> = {
   BOLETO_DISPONIVEL: 'boleto_a_vencer_cecim',
   COBRANCA_PENDENTE: 'boleto_vencido_cecim',
   CONFIRMACAO_PAGAMENTO: 'pagamento_confirmado_cecim',
+  LEMBRETE_VENCIMENTO: 'vence_hoje_cecim',
 };
 
 /**
