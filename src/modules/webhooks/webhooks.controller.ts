@@ -1,4 +1,5 @@
-import { BadRequestException, Body, Controller, Get, HttpCode, Logger, Post, Query, Res } from '@nestjs/common';
+import { BadRequestException, Body, Controller, ForbiddenException, Get, HttpCode, Logger, Post, Query, Req, Res } from '@nestjs/common';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { ApiTags } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { Response } from 'express';
@@ -55,7 +56,8 @@ export class WebhooksController {
    */
   @Post('whatsapp')
   @HttpCode(200)
-  receiveWhatsAppEvent(@Body() body: any) {
+  receiveWhatsAppEvent(@Body() body: any, @Req() req?: any) {
+    this.conferirAssinaturaMeta(req);
     // Responde à Meta imediatamente e processa em segundo plano: se a resposta
     // demora, a Meta reenvia o mesmo evento (o que gerava respostas repetidas).
     const entries = body?.entry ?? [];
@@ -179,4 +181,30 @@ export class WebhooksController {
     }
     return { received: true };
   }
+
+  /**
+   * Confere que o evento veio mesmo da Meta (cabeçalho X-Hub-Signature-256 =
+   * HMAC-SHA256 do corpo com o App Secret). Sem WHATSAPP_APP_SECRET configurado,
+   * só avisa no log - para não parar o WhatsApp antes de a chave ser cadastrada.
+   */
+  private conferirAssinaturaMeta(req: any) {
+    const segredo = this.config.get<string>('whatsapp.appSecret');
+    if (!segredo) {
+      if (!this.avisouSemSegredo) {
+        this.logger.warn('WHATSAPP_APP_SECRET não definido: assinatura da Meta não conferida no webhook. Defina no Render.');
+        this.avisouSemSegredo = true;
+      }
+      return;
+    }
+    const recebida = String(req?.headers?.['x-hub-signature-256'] ?? '');
+    const esperada = 'sha256=' + createHmac('sha256', segredo).update(req?.rawBody ?? '').digest('hex');
+    const a = Buffer.from(recebida);
+    const b = Buffer.from(esperada);
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      this.logger.warn('Evento do WhatsApp com assinatura inválida - ignorado.');
+      throw new ForbiddenException('Assinatura inválida.');
+    }
+  }
+
+  private avisouSemSegredo = false;
 }

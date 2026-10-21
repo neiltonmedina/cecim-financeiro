@@ -1,8 +1,14 @@
+import { randomBytes } from 'crypto';
+
+// Sem JWT_SECRET configurado, gera uma chave aleatória a cada início (nunca uma chave fixa
+// conhecida, que permitiria fabricar login). Efeito colateral: todos precisam entrar de novo após reiniciar.
+const jwtSecretAleatorio = randomBytes(32).toString('hex');
+
 export default () => ({
   port: parseInt(process.env.PORT ?? '3000', 10),
   appUrl: process.env.APP_URL ?? 'http://localhost:3000',
   jwt: {
-    secret: process.env.JWT_SECRET ?? 'dev-secret',
+    secret: process.env.JWT_SECRET || jwtSecretAleatorio,
     expiresIn: process.env.JWT_EXPIRES_IN ?? '8h',
   },
   redis: {
@@ -18,6 +24,8 @@ export default () => ({
     businessAccountId: process.env.WHATSAPP_BUSINESS_ACCOUNT_ID ?? '',
     accessToken: process.env.WHATSAPP_ACCESS_TOKEN ?? '',
     verifyToken: process.env.WHATSAPP_VERIFY_TOKEN ?? '',
+    // App Secret do app da Meta: confere a assinatura das mensagens recebidas no webhook.
+    appSecret: process.env.WHATSAPP_APP_SECRET ?? '',
     templateName: process.env.WHATSAPP_TEMPLATE_NAME ?? 'cobranca_cecim',
     templateLanguage: process.env.WHATSAPP_TEMPLATE_LANGUAGE ?? 'pt_BR',
   },

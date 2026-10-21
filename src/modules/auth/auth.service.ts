@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, HttpException, HttpStatus, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -10,15 +10,26 @@ export class AuthService {
     private readonly jwtService: JwtService,
   ) {}
 
+  /** Tentativas erradas por e-mail: 5 erros bloqueiam o login por 15 minutos. */
+  private readonly tentativas = new Map<string, { erros: number; bloqueadoAte: number }>();
+
   async login(email: string, password: string) {
-    const user = await this.prisma.user.findUnique({ where: { email } });
-    if (!user || !user.active) {
-      throw new UnauthorizedException('Credenciais inválidas');
+    const chave = String(email ?? '').trim().toLowerCase();
+    const t = this.tentativas.get(chave);
+    if (t && t.bloqueadoAte > Date.now()) {
+      throw new HttpException('Muitas tentativas erradas. Aguarde 15 minutos e tente de novo.', HttpStatus.TOO_MANY_REQUESTS);
     }
-    const passwordOk = await bcrypt.compare(password, user.passwordHash);
+    // E-mail sem diferença de maiúsculas/espaços ("Marcelo@..." = "marcelo@...").
+    const user = await this.prisma.user.findFirst({ where: { email: { equals: chave, mode: 'insensitive' } } });
+    const passwordOk = !!user && user.active && (await bcrypt.compare(password, user.passwordHash));
     if (!passwordOk) {
+      // Bloqueio anterior já vencido: recomeça a contagem.
+      const erros = (t && !t.bloqueadoAte ? t.erros : 0) + 1;
+      if (this.tentativas.size > 10000) this.tentativas.clear();
+      this.tentativas.set(chave, { erros, bloqueadoAte: erros >= 5 ? Date.now() + 15 * 60 * 1000 : 0 });
       throw new UnauthorizedException('Credenciais inválidas');
     }
+    this.tentativas.delete(chave);
 
     const payload = { sub: user.id, email: user.email, role: user.role };
     return {

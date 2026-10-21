@@ -42,3 +42,30 @@ describe('WebhooksController - status de leitura do WhatsApp', () => {
     expect(prisma.notificationLog.update).not.toHaveBeenCalled();
   });
 });
+
+describe('WebhooksController - assinatura da Meta', () => {
+  const { createHmac } = require('crypto');
+  const corpo = JSON.stringify({ entry: [] });
+  function setupAssinatura(segredo: string) {
+    const config: any = { get: jest.fn().mockReturnValue(segredo) };
+    return new WebhooksController({} as any, config, {} as any, {} as any);
+  }
+  const req = (assinatura?: string) => ({ rawBody: Buffer.from(corpo), headers: assinatura ? { 'x-hub-signature-256': assinatura } : {} });
+
+  it('aceita evento assinado pela Meta', () => {
+    const controller = setupAssinatura('segredo');
+    const ok = 'sha256=' + createHmac('sha256', 'segredo').update(corpo).digest('hex');
+    expect(() => controller.receiveWhatsAppEvent(JSON.parse(corpo), req(ok))).not.toThrow();
+  });
+
+  it('recusa evento sem assinatura ou com assinatura falsa', () => {
+    const controller = setupAssinatura('segredo');
+    expect(() => controller.receiveWhatsAppEvent(JSON.parse(corpo), req())).toThrow('Assinatura inválida');
+    expect(() => controller.receiveWhatsAppEvent(JSON.parse(corpo), req('sha256=falsa'))).toThrow('Assinatura inválida');
+  });
+
+  it('sem App Secret configurado, continua aceitando (só avisa no log)', () => {
+    const controller = setupAssinatura('');
+    expect(() => controller.receiveWhatsAppEvent(JSON.parse(corpo), req())).not.toThrow();
+  });
+});

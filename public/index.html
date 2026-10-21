@@ -1028,7 +1028,7 @@ async function loadClients() {
       clientsCache[c.id] = c;
       const cidadeUf = [c.cidade, c.uf].filter(Boolean).join('/') || '-';
       html += `<tr>
-        <td>${c.name}</td>
+        <td>${escHtml(c.name)}</td>
         <td>${c.document ?? '-'}</td>
         <td>${c.phoneE164 ?? '-'}${(c.telefonesExtras || []).length ? ` <span class="pill" title="${c.telefonesExtras.join(', ')}">+${c.telefonesExtras.length}</span>` : ''}</td>
         <td>${cidadeUf}</td>
@@ -1239,7 +1239,9 @@ const CAMPOS_MODELO = [
 // Modelos antigos usam {{vencimento}} (data da cobrança) - no editor vira o mesmo [vencimento].
 const paraEditor = (t) => CAMPOS_MODELO.reduce((txt, [rot, chave]) => txt.replaceAll(`{{${chave}}}`, `[${rot}]`), String(t || '').replaceAll('{{vencimento}}', '{{vencimentoBoleto}}'));
 const doEditor = (t) => CAMPOS_MODELO.reduce((txt, [rot, chave]) => txt.replaceAll(`[${rot}]`, `{{${chave}}}`), String(t || ''));
-const escHtml = (t) => String(t).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+const escHtml = (t) => String(t ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+// Texto usado como argumento JS dentro de onclick="...('x')": tira o que poderia fechar a string/atributo.
+const argJs = (t) => String(t ?? '').replace(/['"\\<>&`]/g, '');
 function previaWhatsApp(textoEditor) {
   let t = escHtml(textoEditor);
   for (const [rot, , ex] of CAMPOS_MODELO) t = t.replaceAll(`[${rot}]`, `<span style="background:#fff3c4; border-radius:3px;">${ex}</span>`);
@@ -1497,7 +1499,7 @@ function renderImportPreview() {
     <table><thead><tr><th>Nome</th><th>Documento</th><th>Telefone</th><th>Valor</th><th>Vencimento</th></tr></thead><tbody>`;
   for (const r of importRows) {
     html += `<tr>
-      <td>${r.nome}</td>
+      <td>${escHtml(r.nome)}</td>
       <td>${r.document || '<span style="color:var(--red)">faltando</span>'}</td>
       <td>${r.phone || '<span style="color:var(--red)">faltando</span>'}</td>
       <td>${r.amountCents != null ? fmtMoney(r.amountCents) : '<span style="color:var(--red)">inválido</span>'}</td>
@@ -1567,7 +1569,7 @@ async function populateTestChargeClientSelect() {
       sel.innerHTML = '<option value="">Nenhum cliente cadastrado</option>';
       return;
     }
-    sel.innerHTML = clients.map((c) => `<option value="${c.id}">${c.name}</option>`).join('');
+    sel.innerHTML = clients.map((c) => `<option value="${c.id}">${escHtml(c.name)}</option>`).join('');
   } catch (e) {
     sel.innerHTML = '<option value="">Erro ao carregar clientes</option>';
   }
@@ -1655,7 +1657,7 @@ async function buscarBoletosInter() {
     for (const b of boletos) {
       html += `<tr class="${b.jaNoPainel ? 'inter-ja' : ''}">
         <td>${b.jaNoPainel ? '✔️' : `<input type="checkbox" class="inter-sel" value="${b.codigoSolicitacao}" />`}</td>
-        <td>${b.nome}${b.jaNoPainel ? ' <span style="color:var(--muted); font-size:12px;">(já no painel)</span>' : ''}</td>
+        <td>${escHtml(b.nome)}${b.jaNoPainel ? ' <span style="color:var(--muted); font-size:12px;">(já no painel)</span>' : ''}</td>
         <td>${b.documento || '-'}</td>
         <td>${fmtMoney(b.valorCents)}</td>
         <td>${b.vencimento.split('-').reverse().join('/')}</td>
@@ -1822,7 +1824,7 @@ async function loadCharges(origem = chargesOrigem) {
         ? `<span style="color:var(--red); font-weight:600;">sem telefone</span>`
         : `<span style="font-variant-numeric:tabular-nums;">${c.client.phoneE164}</span>`) +
         ` <button class="secondary" style="padding:3px 9px; font-size:12px; margin-left:4px;" title="Corrigir o WhatsApp deste cliente"
-            onclick="editarTelefone('${c.clientId}', '${c.client?.phoneE164 ?? ''}', '${(c.client?.name ?? '').replaceAll("'", '')}')">${semTelefone ? 'Cadastrar' : 'Editar'}</button>`;
+            onclick="editarTelefone('${c.clientId}', '${c.client?.phoneE164 ?? ''}', '${argJs(c.client?.name)}')">${semTelefone ? 'Cadastrar' : 'Editar'}</button>`;
       const divergeBoleto = c.boletoDataVencimento &&
         new Date(c.boletoDataVencimento).toISOString().slice(0, 10) !== new Date(c.dueDate).toISOString().slice(0, 10);
       const vencimentoCell = divergeBoleto
@@ -1830,9 +1832,9 @@ async function loadCharges(origem = chargesOrigem) {
         : fmtDate(c.dueDate);
       html += `<tr>
         <td><input type="checkbox" ${disabled} onchange="toggleChargeSelection('${c.id}', this.checked)" /></td>
-        <td>${c.client?.name ?? '-'}${avisoBoleto}</td>
+        <td>${escHtml(c.client?.name ?? '-')}${avisoBoleto}</td>
         <td>${telefoneCell}</td>
-        <td>${c.description}</td>
+        <td>${escHtml(c.description)}</td>
         <td>${fmtMoney(c.amountCents)}</td>
         <td>${vencimentoCell}</td>
         <td style="white-space:nowrap;"><span class="badge ${c.status}">${c.status}</span>${iconeEnvio(c)}${c.notifications?.[0]?.status === 'FAILED'
@@ -1951,7 +1953,7 @@ function solucaoDoErro(msg, temBoleto) {
 
 /** Botões de solução para um envio que falhou (só os que resolvem aquele erro). */
 function botoesSolucao({ chargeId, clientId, telefone, nome, temBoleto, erro, intervalDays }) {
-  const nomeSeguro = String(nome || '').replaceAll("'", '');
+  const nomeSeguro = argJs(nome);
   const tipo = solucaoDoErro(erro, temBoleto);
   const iv = intervalDays || 'undefined';
   const btnEditar = `<button onclick="closeModal(); editarTelefone('${clientId}', '${telefone || ''}', '${nomeSeguro}', '${chargeId}', ${iv})">📞 Corrigir telefone e reenviar</button>`;
@@ -2063,7 +2065,7 @@ function renderProblemas() {
   for (const c of lista) {
     const tipo = TIPOS_PROBLEMA[c.problema];
     const n = c.notifications?.[0];
-    const nome = (c.client?.name ?? '').replaceAll("'", '');
+    const nome = argJs(c.client?.name);
     let motivo, acoes;
     if (c.problema === 'FALHA_ENVIO') {
       motivo = explicarErroEnvio(n?.errorMessage, !!(c.linhaDigitavel || c.pixCopiaECola));
@@ -2077,7 +2079,7 @@ function renderProblemas() {
       acoes = `<button onclick="editarTelefone('${c.clientId}', '', '${nome}', '${c.id}')">📞 Cadastrar telefone e enviar</button>`;
     }
     html += `<tr>
-      <td><strong style="font-weight:600;">${c.client?.name ?? '-'}</strong><div style="font-size:12px; color:var(--muted);">${c.client?.phoneE164 ?? 'sem telefone'}</div></td>
+      <td><strong style="font-weight:600;">${escHtml(c.client?.name ?? '-')}</strong><div style="font-size:12px; color:var(--muted);">${c.client?.phoneE164 ?? 'sem telefone'}</div></td>
       <td><span class="pill ${c.origem === 'INTER' ? 'inter' : 'painel'}">${c.origem === 'INTER' ? 'Inter' : 'Painel'}</span></td>
       <td style="white-space:nowrap;">${fmtMoney(c.amountCents)}</td>
       <td>${fmtDate(c.dueDate)}</td>
@@ -2156,13 +2158,13 @@ function mostrarErroEnvio(chargeId) {
   if (n.status === 'FAILED') {
     document.getElementById('modal').innerHTML = `
       <h3 style="margin-bottom:4px;">⚠️ Cobrança não enviada</h3>
-      <p style="color:var(--muted); font-size:13px; margin-top:0;">${cliente}</p>
+      <p style="color:var(--muted); font-size:13px; margin-top:0;">${escHtml(cliente)}</p>
       <div style="padding:12px 14px; border-radius:10px; background:var(--red-soft); color:var(--red); font-size:14px;">
         <strong>O que aconteceu:</strong> ${explicarErroEnvio(n.errorMessage, temBoleto)}
       </div>
       <div style="font-size:12.5px; color:var(--muted); margin-top:10px; line-height:1.6;">
-        Número usado: ${n.destination} · tentativa ${n.attempt} · ${fmtDateTime(n.failedAt || n.queuedAt)}<br>
-        Detalhe técnico: ${n.errorMessage || 'não informado pelo WhatsApp'}
+        Número usado: ${escHtml(n.destination)} · tentativa ${n.attempt} · ${fmtDateTime(n.failedAt || n.queuedAt)}<br>
+        Detalhe técnico: ${escHtml(n.errorMessage || 'não informado pelo WhatsApp')}
       </div>
       <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:18px; flex-wrap:wrap;">
         ${botoesSolucao({ chargeId, clientId, telefone, nome: cliente, temBoleto, erro: n.errorMessage })}
@@ -2297,8 +2299,8 @@ async function loadConversations() {
     let html = '<table><thead><tr><th>Cliente</th><th>Cobrança</th><th>Estágio</th><th>Atenção</th><th>Última atualização</th></tr></thead><tbody>';
     for (const c of conversations) {
       html += `<tr class="clickable" onclick="openConversation('${c.id}')">
-        <td>${c.client?.name ?? '-'}</td>
-        <td>${c.charge?.description ?? '-'}</td>
+        <td>${escHtml(c.client?.name ?? '-')}</td>
+        <td>${escHtml(c.charge?.description ?? '-')}</td>
         <td><span class="badge ${c.stage}">${c.stage.replaceAll('_', ' ')}</span></td>
         <td>${c.humanRequested ? '<span class="human-flag">⚠ precisa de humano</span>' : (c.paused ? '<span class="human-flag">⏸ pausada</span>' : '-')}</td>
         <td>${fmtDateTime(c.updatedAt)}</td>
@@ -2317,9 +2319,9 @@ async function openConversation(id) {
   document.getElementById('modal-overlay').classList.add('open');
   try {
     const conv = await api('/conversations/' + id);
-    let html = `<h3>${conv.client?.name ?? '-'}</h3>
+    let html = `<h3>${escHtml(conv.client?.name ?? '-')}</h3>
       <p style="color:var(--muted); font-size:13px; margin-top:-8px;">
-        ${conv.charge?.description ?? 'Sem cobrança vinculada'} —
+        ${escHtml(conv.charge?.description ?? 'Sem cobrança vinculada')} —
         <span class="badge ${conv.stage}">${conv.stage.replaceAll('_', ' ')}</span>
         ${conv.humanRequested ? ' <span class="human-flag">⚠ aguardando humano</span>' : ''}
         ${conv.paused ? ' <span class="human-flag">⏸ pausada manualmente</span>' : ''}
@@ -2331,7 +2333,7 @@ async function openConversation(id) {
         QUEUED: ['⏳', 'Na fila de envio desde ' + (ultimo ? fmtDateTime(ultimo.queuedAt) : '') + '. Se passar de 10 minutos, o sistema reenvia sozinho.', 'var(--yellow)'],
         SENDING: ['⏳', 'Enviando agora...', 'var(--yellow)'],
         FAILED: ['⚠️', 'Não enviada. ' + explicarErroEnvio(ultimo?.errorMessage, !!(conv.charge?.linhaDigitavel || conv.charge?.pixCopiaECola)) +
-          '<div style="color:var(--muted); font-size:12px; margin-top:4px;">Detalhe técnico: ' + (ultimo?.errorMessage || 'não informado') + '</div>' +
+          '<div style="color:var(--muted); font-size:12px; margin-top:4px;">Detalhe técnico: ' + escHtml(ultimo?.errorMessage || 'não informado') + '</div>' +
           '<div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">' + botoesSolucao({
             chargeId: conv.chargeId, clientId: conv.clientId, telefone: conv.client?.phoneE164, nome: conv.client?.name,
             temBoleto: !!(conv.charge?.linhaDigitavel || conv.charge?.pixCopiaECola), erro: ultimo?.errorMessage, intervalDays: conv.intervalDays,
@@ -2343,12 +2345,12 @@ async function openConversation(id) {
       html += `<div class="empty">Nenhuma mensagem trocada ainda.</div>
         <div style="margin-top:-12px; padding:10px 12px; border-radius:10px; background:#f6f7fb; font-size:13px; color:${cor};">
           <strong>${ico} Envio da cobrança:</strong> ${texto}
-          ${ultimo ? `<div style="color:var(--muted); font-size:12px; margin-top:4px;">Destino: ${ultimo.destination} · tentativa ${ultimo.attempt}</div>` : ''}
+          ${ultimo ? `<div style="color:var(--muted); font-size:12px; margin-top:4px;">Destino: ${escHtml(ultimo.destination)} · tentativa ${ultimo.attempt}</div>` : ''}
         </div>`;
     } else {
       for (const m of conv.messages) {
         html += `<div class="msg ${m.direction}">
-          ${m.content}
+          ${escHtml(m.content)}
           <div class="meta">${m.direction === 'INBOUND' ? 'Cliente' : 'Agente'} • ${fmtDateTime(m.createdAt)}${m.intent ? ' • ' + m.intent.replaceAll('_', ' ') : ''}</div>
         </div>`;
       }
@@ -2435,13 +2437,13 @@ function hbars(el, itens, vazio) {
   const max = Math.max(...itens.map((i) => i.valor)) || 1;
   el.innerHTML = itens.map((i, k) => `
     <div class="hbar-row" data-k="${k}">
-      <div class="lbl" title="${i.label}">${i.ico ? `<span class="status-ico" style="color:${i.cor}">${i.ico}</span>` : ''}${i.label}${i.sub ? `<small>${i.sub}</small>` : ''}</div>
+      <div class="lbl" title="${escHtml(i.label)}">${i.ico ? `<span class="status-ico" style="color:${i.cor}">${i.ico}</span>` : ''}${escHtml(i.label)}${i.sub ? `<small>${i.sub}</small>` : ''}</div>
       <div class="hbar-track"><div class="hbar-fill" style="width:${(i.valor / max) * 100}%; background:${i.cor || 'var(--series-1)'}"></div></div>
       <div class="val">${i.texto}${i.texto2 ? `<small>${i.texto2}</small>` : ''}</div>
     </div>`).join('');
   el.querySelectorAll('.hbar-row').forEach((row) => {
     const i = itens[row.dataset.k];
-    row.addEventListener('mousemove', (e) => showTip(e, `<strong>${i.label}</strong><br>${i.tip || i.texto}`));
+    row.addEventListener('mousemove', (e) => showTip(e, `<strong>${escHtml(i.label)}</strong><br>${i.tip || i.texto}`));
     row.addEventListener('mouseleave', hideTip);
   });
 }
@@ -2581,7 +2583,7 @@ async function loadOfertas() {
     el.innerHTML = `<p style="font-size:14px; margin-top:0;"><strong>${r.totalClientes} cliente(s)</strong> receberam <strong>${r.totalMensagens} mensagem(ns)</strong> com essa oferta.</p>
       <table><thead><tr><th>Cliente</th><th>Telefone</th><th>Enviada em</th><th>Mensagem</th></tr></thead><tbody>` +
       r.mensagens.map((m) => `<tr class="clickable" onclick="openConversation('${m.conversationId}')">
-        <td>${m.cliente}</td><td>${m.telefone ?? '-'}</td><td style="white-space:nowrap;">${fmtDateTime(m.enviadaEm)}</td>
+        <td>${escHtml(m.cliente)}</td><td>${escHtml(m.telefone ?? '-')}</td><td style="white-space:nowrap;">${fmtDateTime(m.enviadaEm)}</td>
         <td style="font-size:12.5px; color:var(--muted); max-width:520px;">${escHtml(m.texto)}</td></tr>`).join('') + '</tbody></table>';
   } catch (e) {
     el.className = '';
