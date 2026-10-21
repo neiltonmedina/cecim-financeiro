@@ -30,7 +30,7 @@ function setup(conversations: any[]) {
   };
   const whatsapp: any = { send: jest.fn().mockResolvedValue({ providerMessageId: 'x' }) };
   const conversationsService: any = { sincronizarPagamentosInter: jest.fn().mockResolvedValue(0) };
-  const service = new SchedulerService(prisma, { lembretesDoDiaDoVencimento: jest.fn().mockResolvedValue(0) } as any, whatsapp, conversationsService);
+  const service = new SchedulerService(prisma, { lembretesDoDiaDoVencimento: jest.fn().mockResolvedValue(0) } as any, whatsapp, conversationsService, { enviarAvisosAutomaticos: jest.fn().mockResolvedValue(0) } as any);
   return { service, prisma, whatsapp };
 }
 

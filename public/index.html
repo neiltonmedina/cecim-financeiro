@@ -56,7 +56,11 @@
   .sidebar {
     width: 248px; flex-shrink: 0; background: linear-gradient(180deg, var(--primary) 0%, var(--primary-dark) 100%);
     color: #fff; display: flex; flex-direction: column; position: sticky; top: 0; height: 100vh; padding: 22px 14px;
+    /* Telas baixas (notebook): o menu rola em vez de esconder os últimos itens. */
+    overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.3) transparent;
   }
+  .sidebar::-webkit-scrollbar { width: 6px; }
+  .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 3px; }
   .sidebar .brand { display: flex; align-items: center; gap: 12px; padding: 0 8px 22px; border-bottom: 1px solid rgba(255,255,255,0.12); }
   .sidebar .brand img { height: 46px; width: 46px; border-radius: 50%; background: #fff; display: block; }
   .sidebar .brand .name { font-size: 16px; font-weight: 800; letter-spacing: 0.2px; color: #fff; }
@@ -191,7 +195,7 @@
   }
   @media (max-width: 860px) {
     #app.layout.visible { flex-direction: column; }
-    .sidebar { width: 100%; height: auto; position: static; padding: 12px; }
+    .sidebar { width: 100%; height: auto; position: static; padding: 12px; overflow-y: visible; }
     .sidebar .brand { border-bottom: none; padding-bottom: 8px; }
     .sidebar nav.tabs { flex-direction: row; overflow-x: auto; margin-top: 4px; }
     .sidebar nav.tabs .section, #health-bar { display: none; }
@@ -293,6 +297,7 @@
       <div class="section">Cobranças</div>
       <button id="tab-btn-charges" onclick="switchTab('charges')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/><rect x="3" y="3" width="18" height="18" rx="3"/></svg><span>Novas cobranças</span></button>
       <button id="tab-btn-inter" onclick="switchTab('inter')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><path d="M6 20V9M10 20V9M14 20V9M18 20V9"/><path d="M3 20h18"/></svg><span>Boletos do Inter</span></button>
+      <button id="tab-btn-mensal" onclick="switchTab('mensal')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4M8 14h3M8 17h6"/></svg><span>Boletos do mês</span></button>
       <button id="tab-btn-problemas" onclick="switchTab('problemas')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg><span>Com problema</span><span class="nav-badge" id="badge-problemas">0</span></button>
       <div class="section">Relacionamento</div>
       <button id="tab-btn-clients" onclick="switchTab('clients')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.5 3.4-5.5 6.5-5.5s5.7 2 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M21.5 20c-.5-2.6-2-4.4-4-5.1"/></svg><span>Clientes</span></button>
@@ -441,6 +446,51 @@
 
         <div id="agendados-PAINEL"></div>
         <div id="charges-content-PAINEL" class="loading">Carregando...</div>
+      </div>
+    </div>
+
+    <div id="tab-mensal" class="tab" style="display:none;">
+      <div class="card">
+        <div class="card-head"><div><h3>Gerar boletos do mês</h3>
+          <div class="hint">Substitui o agente de boletos: envie a mesma planilha (seu_numero, nome_pagador, cpf_cnpj, valor, dia_vencimento...). Nada é gerado antes da sua conferência, e boleto já gerado no mês nunca é gerado de novo.
+          <strong>Depois de usar aqui, não mande a mesma planilha para o agente</strong> - o cliente receberia dois boletos.</div></div></div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:12px; align-items:end;">
+          <label style="font-size:13px; font-weight:600;">Mês dos vencimentos<input id="mensal-mes-ref" type="month" style="display:block; width:100%; margin-top:4px;" /></label>
+          <label style="font-size:13px; font-weight:600;">Avisar quantos dias antes do vencimento<input id="mensal-dias-antes" type="number" min="0" max="30" value="5" style="display:block; width:100%; margin-top:4px;" /></label>
+          <label style="font-size:13px; font-weight:600;">Intervalo da régua depois de vencido (dias)<input id="mensal-intervalo" type="number" min="1" max="60" value="5" style="display:block; width:100%; margin-top:4px;" /></label>
+          <label style="font-size:13px; font-weight:600; display:flex; gap:8px; align-items:center;"><input id="mensal-auto" type="checkbox" checked style="width:auto;" /> Enviar o aviso automaticamente</label>
+        </div>
+        <div style="margin-top:12px;"><input type="file" id="mensal-arquivo" accept=".xlsx,.xls" onchange="lerPlanilhaMensal(event)" /></div>
+        <div id="mensal-conferencia" style="margin-top:12px;"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div><h3>Planilhas enviadas</h3><div class="hint">Cada envio do mês. O aviso automático pode ser pausado a qualquer momento.</div></div></div>
+        <div id="mensal-lotes" class="loading">Carregando...</div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><div><h3>Boletos do mês</h3><div class="hint">Boletos gerados pela planilha. Com o aviso automático ligado, cada cliente recebe o "boleto a vencer" na data certa; você também pode disparar manualmente.</div></div></div>
+        <div class="filters">
+          <select id="charge-status-filter-MENSAL" onchange="loadCharges('MENSAL')">
+            <option value="">Todos os status</option>
+            <option value="PENDENTE">Pendente (ainda não avisado)</option>
+            <option value="ENVIADA">Enviada</option>
+            <option value="PAGA">Paga</option>
+            <option value="VENCIDA">Vencida</option>
+            <option value="CANCELADA">Cancelada</option>
+          </select>
+          <button class="secondary" onclick="loadCharges('MENSAL')">Atualizar</button>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px; padding:10px 12px; background:var(--accent-soft); border-radius:10px; flex-wrap:wrap;">
+          <strong class="campaign-count" style="font-size:13px;">0 selecionada(s)</strong>
+          <label style="font-size:13px; color:var(--muted);">Intervalo entre contatos (dias):</label>
+          <input id="campaign-interval-MENSAL" type="number" min="1" step="1" value="5" style="width:70px;" />
+          <button onclick="confirmarCampanha()">Confirmar e disparar</button>
+          <button class="secondary" onclick="abrirAgendamento()">🕒 Agendar disparo</button>
+        </div>
+        <div id="agendados-MENSAL"></div>
+        <div id="charges-content-MENSAL" class="loading">Carregando...</div>
       </div>
     </div>
 
@@ -752,6 +802,188 @@ async function prepararApp() {
   }
 }
 
+// ---------- Boletos do mês (planilha mensal) ----------
+// Nomes de coluna aceitos (os mesmos do agente de boletos; sem acento/maiúsculas).
+const COLUNAS_MENSAL = {
+  nome: ['nome_pagador', 'empresa', 'nome', 'cliente', 'razao social', 'razao_social'],
+  documento: ['cpf_cnpj', 'cnpj', 'cpf', 'cpf/cnpj', 'documento'],
+  valor: ['valor', 'a pagar', 'a_pagar', 'valor boleto', 'valor_boleto'],
+  dia: ['dia_vencimento', 'data vencimento', 'data_vencimento', 'vencimento', 'dia'],
+  seuNumero: ['seu_numero', 'seu numero', 'identificador', 'referencia'],
+  logradouro: ['logradouro', 'endereco', 'rua'],
+  numero: ['numero', 'num', 'nº'],
+  bairro: ['bairro'],
+  cidade: ['cidade', 'municipio'],
+  uf: ['uf', 'estado'],
+  cep: ['cep'],
+};
+const normCol = (t) => String(t ?? '').trim().toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
+let mensalLinhas = [];
+let mensalConferencia = [];
+let mensalArquivo = '';
+
+function prepararMensal() {
+  const mes = document.getElementById('mensal-mes-ref');
+  if (!mes.value) {
+    // Padrão: mês seguinte (a planilha é enviada no fim do mês para o mês que começa).
+    const d = new Date();
+    d.setDate(1);
+    d.setMonth(d.getMonth() + 1);
+    mes.value = d.toLocaleDateString('en-CA').slice(0, 7);
+  }
+}
+
+function lerPlanilhaMensal(event) {
+  const file = event.target.files[0];
+  const el = document.getElementById('mensal-conferencia');
+  if (!file) return;
+  mensalArquivo = file.name;
+  el.innerHTML = '<div class="loading">Lendo planilha...</div>';
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const bruto = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: '' });
+      // Cabeçalho: primeira linha (até a 15ª) com pelo menos 2 colunas conhecidas.
+      const conhecidas = new Set(Object.values(COLUNAS_MENSAL).flat().map(normCol));
+      let linhaCab = bruto.findIndex((r, i) => i < 15 && r.filter((v) => conhecidas.has(normCol(v))).length >= 2);
+      if (linhaCab < 0) linhaCab = 0;
+      const cab = bruto[linhaCab].map(normCol);
+      const idx = Object.fromEntries(Object.entries(COLUNAS_MENSAL).map(([campo, nomes]) => [campo, nomes.map(normCol).map((n) => cab.indexOf(n)).find((i) => i >= 0) ?? -1]));
+      const faltando = ['nome', 'documento', 'valor', 'dia'].filter((c) => idx[c] < 0);
+      if (faltando.length) throw new Error('colunas não encontradas: ' + faltando.join(', ') + '. Colunas lidas: ' + bruto[linhaCab].join(', '));
+      mensalLinhas = bruto.slice(linhaCab + 1)
+        .filter((r) => r.some((v) => String(v).trim()))
+        .map((r) => Object.fromEntries(Object.entries(idx).filter(([, i]) => i >= 0).map(([campo, i]) => [campo, String(r[i] ?? '').trim()])));
+      await conferirMensal();
+    } catch (err) {
+      el.innerHTML = '<div class="empty" style="color:var(--red);">Não foi possível ler a planilha: ' + escHtml(err.message) + '</div>';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+async function conferirMensal() {
+  const el = document.getElementById('mensal-conferencia');
+  const mes = document.getElementById('mensal-mes-ref').value;
+  el.innerHTML = '<div class="loading">Conferindo ' + mensalLinhas.length + ' linha(s)...</div>';
+  try {
+    mensalConferencia = await api('/lotes/conferir', { method: 'POST', body: JSON.stringify({ mes, linhas: mensalLinhas }) });
+  } catch (e) {
+    el.innerHTML = '<div class="empty" style="color:var(--red);">' + escHtml(e.message) + '</div>';
+    return;
+  }
+  const validas = mensalConferencia.filter((l) => !l.erros.length && !l.jaGerado);
+  const comErro = mensalConferencia.filter((l) => l.erros.length);
+  const jaGeradas = mensalConferencia.filter((l) => l.jaGerado && !l.erros.length);
+  const semTelefone = validas.filter((l) => !l.cliente?.telefones);
+  const novos = validas.filter((l) => !l.cliente);
+  const total = validas.reduce((t, l) => t + l.valorCents, 0);
+  const [ano, m] = mes.split('-');
+  el.innerHTML = `
+    <div class="dash-kpis" style="margin-bottom:12px;">
+      <div class="tile good"><div class="t-label">Para gerar</div><div class="t-value">${validas.length}</div><div class="t-sub">${fmtMoney(total)} · vencimentos em ${m}/${ano}</div></div>
+      <div class="tile"><div class="t-label">Já gerados neste mês</div><div class="t-value">${jaGeradas.length}</div><div class="t-sub">serão pulados (sem duplicar)</div></div>
+      <div class="tile ${comErro.length ? 'critical' : ''}"><div class="t-label">Com erro</div><div class="t-value">${comErro.length}</div><div class="t-sub">corrija na planilha e envie de novo</div></div>
+      <div class="tile"><div class="t-label">Sem telefone</div><div class="t-value">${semTelefone.length}</div><div class="t-sub">boleto sai, mas o aviso não (cadastre o telefone)</div></div>
+      <div class="tile"><div class="t-label">Clientes novos</div><div class="t-value">${novos.length}</div><div class="t-sub">serão cadastrados pelo CNPJ</div></div>
+    </div>
+    <div style="max-height:380px; overflow:auto; border:1px solid var(--border); border-radius:10px;">
+    <table><thead><tr><th>Nº</th><th>Pagador</th><th>CPF/CNPJ</th><th>Valor</th><th>Vencimento</th><th>Cliente no painel</th><th>Situação</th></tr></thead><tbody>
+    ${mensalConferencia.map((l) => `<tr id="mensal-linha-${l.indice}">
+      <td>${escHtml(l.seuNumero || '-')}</td>
+      <td>${escHtml(l.nome)}</td>
+      <td style="font-variant-numeric:tabular-nums;">${escHtml(l.documento)}</td>
+      <td>${l.valorCents ? fmtMoney(l.valorCents) : '-'}</td>
+      <td>${l.vencimento ? l.vencimento.split('-').reverse().join('/') : '-'}</td>
+      <td>${l.cliente ? escHtml(l.cliente.nome) + (l.cliente.telefones ? '' : ' <span style="color:var(--red); font-size:12px;">sem telefone</span>') : '<span class="pill painel">novo</span> <span style="color:var(--red); font-size:12px;">sem telefone</span>'}</td>
+      <td class="mensal-situacao">${l.erros.length ? '<span style="color:var(--red);">⚠ ' + escHtml(l.erros.join('; ')) + '</span>'
+        : l.jaGerado && l.semBoleto ? '<span style="color:#8a5a12;">já cadastrado, mas sem boleto - use "Com problema" → Gerar boleto</span>'
+        : l.jaGerado ? '<span style="color:var(--muted);">já gerado - pula</span>' : 'pronto para gerar'}</td>
+    </tr>`).join('')}
+    </tbody></table></div>
+    <div style="display:flex; gap:10px; align-items:center; margin-top:12px; flex-wrap:wrap;">
+      ${validas.length ? `<button id="mensal-btn-gerar" onclick="gerarBoletosMensal()">Gerar ${validas.length} boleto(s) no Inter</button>` : ''}
+      <span style="font-size:12.5px; color:var(--muted);">Nada é enviado aos clientes nesta etapa.</span>
+    </div>
+    <div id="mensal-resultado" style="font-size:13px; margin-top:8px;"></div>`;
+}
+
+async function gerarBoletosMensal() {
+  const mes = document.getElementById('mensal-mes-ref').value;
+  const diasAntes = Number(document.getElementById('mensal-dias-antes').value);
+  const intervalDays = Number(document.getElementById('mensal-intervalo').value);
+  const envioAutomatico = document.getElementById('mensal-auto').checked;
+  const validas = mensalConferencia.filter((l) => !l.erros.length && !l.jaGerado);
+  const [ano, m] = mes.split('-');
+  if (!(diasAntes >= 0 && diasAntes <= 30) || !(intervalDays >= 1)) return alert('Confira os dias do aviso e o intervalo da régua.');
+  if (!confirm(`Gerar ${validas.length} boleto(s) no Inter com vencimento em ${m}/${ano}, total ${fmtMoney(validas.reduce((t, l) => t + l.valorCents, 0))}?\n\n` +
+    (envioAutomatico ? `Cada cliente recebe o aviso pelo WhatsApp ${diasAntes} dia(s) antes do vencimento.` : 'O aviso automático fica DESLIGADO: você dispara manualmente.'))) return;
+  const btn = document.getElementById('mensal-btn-gerar');
+  btn.disabled = true;
+  const res = document.getElementById('mensal-resultado');
+  let lote;
+  try {
+    lote = await api('/lotes', { method: 'POST', body: JSON.stringify({ mes, nomeArquivo: mensalArquivo, diasAntes, intervalDays, envioAutomatico }) });
+  } catch (e) {
+    btn.disabled = false;
+    res.innerHTML = '<span style="color:var(--red);">Erro: ' + escHtml(e.message) + '</span>';
+    return;
+  }
+  const cont = { OK: 0, JA_GERADO: 0, ERRO: 0 };
+  for (const [n, l] of validas.entries()) {
+    const cel = document.querySelector('#mensal-linha-' + l.indice + ' .mensal-situacao');
+    cel.innerHTML = '⏳ gerando...';
+    btn.textContent = `Gerando ${n + 1} de ${validas.length}...`;
+    try {
+      const r = await api('/lotes/' + lote.id + '/gerar', { method: 'POST', body: JSON.stringify({ linha: mensalLinhas[l.indice] }) });
+      if (r.status === 'OK') { cont.OK++; cel.innerHTML = '<span style="color:var(--green);">✓ boleto gerado</span>'; }
+      else if (r.status === 'JA_GERADO') { cont.JA_GERADO++; cel.innerHTML = '<span style="color:var(--muted);">já existia - pulado</span>'; }
+      else { cont.ERRO++; cel.innerHTML = '<span style="color:var(--red);">⚠ ' + escHtml(r.erro) + ' (veja em Com problema)</span>'; }
+    } catch (e) {
+      cont.ERRO++;
+      cel.innerHTML = '<span style="color:var(--red);">⚠ ' + escHtml(e.message) + '</span>';
+    }
+  }
+  btn.textContent = 'Concluído';
+  res.innerHTML = `<strong>${cont.OK} boleto(s) gerado(s)</strong>` + (cont.JA_GERADO ? ` · ${cont.JA_GERADO} já existiam` : '') +
+    (cont.ERRO ? ` · <span style="color:var(--red);">${cont.ERRO} com erro - corrija em "Com problema" (Gerar boleto)</span>` : '') +
+    (envioAutomatico ? ` · aviso automático ${diasAntes} dia(s) antes do vencimento.` : ' · aviso automático desligado.');
+  loadCharges('MENSAL');
+  loadLotes();
+  atualizarBadgeProblemas();
+}
+
+async function loadLotes() {
+  const el = document.getElementById('mensal-lotes');
+  try {
+    const lotes = await api('/lotes');
+    el.className = '';
+    el.innerHTML = !lotes.length ? '<div class="empty">Nenhuma planilha enviada ainda.</div>'
+      : '<div style="overflow-x:auto;"><table><thead><tr><th>Mês</th><th>Enviada em</th><th>Boletos</th><th>Pagos</th><th>Aviso</th><th></th></tr></thead><tbody>' +
+        lotes.map((l) => `<tr>
+          <td>${l.mes.split('-').reverse().join('/')}</td>
+          <td>${fmtDateTime(l.createdAt)}${l.nomeArquivo ? '<div style="font-size:12px; color:var(--muted);">' + escHtml(l.nomeArquivo) + '</div>' : ''}</td>
+          <td>${l.total}</td>
+          <td>${l.porStatus.PAGA || 0}</td>
+          <td>${l.envioAutomatico ? `${l.diasAntes} dia(s) antes · régua a cada ${l.intervalDays} dia(s)` : '<span style="color:var(--muted);">pausado (manual)</span>'}</td>
+          <td><button class="secondary" style="padding:4px 10px; font-size:12px;" onclick="alternarEnvioLote('${l.id}', ${!l.envioAutomatico})">${l.envioAutomatico ? 'Pausar aviso' : 'Retomar aviso'}</button></td>
+        </tr>`).join('') + '</tbody></table></div>';
+  } catch (e) {
+    el.innerHTML = '<div class="empty">' + escHtml(e.message) + '</div>';
+  }
+}
+
+async function alternarEnvioLote(id, ligar) {
+  if (!ligar && !confirm('Pausar o aviso automático deste mês? Quem ainda não foi avisado só recebe se você disparar manualmente.')) return;
+  try {
+    await api('/lotes/' + id, { method: 'PATCH', body: JSON.stringify({ envioAutomatico: ligar }) });
+    loadLotes();
+  } catch (e) {
+    alert('Erro: ' + e.message);
+  }
+}
+
 // ---------- Equipe (usuários) e registro de ações ----------
 let usuariosCache = [];
 
@@ -973,6 +1205,7 @@ async function loadHealth() {
 const PAGINAS = {
   dashboard: ['Dashboard', 'Visão geral da carteira, recebimentos e da régua de cobrança'],
   charges: ['Novas cobranças', 'Crie cobranças com boleto novo no Inter e dispare pelo WhatsApp'],
+  mensal: ['Boletos do mês', 'Envie a planilha do mês: o painel gera os boletos no Inter e avisa cada cliente antes do vencimento'],
   inter: ['Boletos do Inter', 'Boletos já gerados no Inter - importe sem duplicar e dispare pelo WhatsApp'],
   problemas: ['Com problema', 'Cobranças que não foram enviadas - veja o motivo e resolva com um clique'],
   clients: ['Clientes', 'Cadastro, edição e importação de clientes'],
@@ -994,6 +1227,7 @@ function switchTab(name) {
   if (name === 'problemas') loadProblemas();
   if (name === 'clients') loadClients();
   if (name === 'charges') loadCharges('PAINEL');
+  if (name === 'mensal') { prepararMensal(); loadCharges('MENSAL'); loadLotes(); }
   if (name === 'inter') { prepararFiltroInter(); loadCharges('INTER'); verificarAvisoInter(); }
   if (name === 'conversations') loadConversations();
   if (name === 'messages') loadTemplates();
@@ -1807,6 +2041,7 @@ async function loadCharges(origem = chargesOrigem) {
     if (!charges.length) {
       el.innerHTML = '<div class="empty">' + (origem === 'INTER'
         ? 'Nenhum boleto importado ainda. Use "Buscar no Inter" acima.'
+        : origem === 'MENSAL' ? 'Nenhum boleto do mês gerado ainda. Envie a planilha acima.'
         : 'Nenhuma cobrança criada no painel.') + '</div>';
       return;
     }
@@ -2082,7 +2317,7 @@ function renderProblemas() {
     }
     html += `<tr>
       <td><strong style="font-weight:600;">${escHtml(c.client?.name ?? '-')}</strong><div style="font-size:12px; color:var(--muted);">${c.client?.phoneE164 ?? 'sem telefone'}</div></td>
-      <td><span class="pill ${c.origem === 'INTER' ? 'inter' : 'painel'}">${c.origem === 'INTER' ? 'Inter' : 'Painel'}</span></td>
+      <td><span class="pill ${c.origem === 'INTER' ? 'inter' : 'painel'}">${c.origem === 'INTER' ? 'Inter' : c.origem === 'MENSAL' ? 'Do mês' : 'Painel'}</span></td>
       <td style="white-space:nowrap;">${fmtMoney(c.amountCents)}</td>
       <td>${fmtDate(c.dueDate)}</td>
       <td style="max-width:320px;"><span style="font-weight:700; color:${tipo.cor};">⚠ ${tipo.label}</span><div style="font-size:12.5px; color:var(--muted); margin-top:2px;">${motivo}</div></td>
@@ -2548,7 +2783,7 @@ function renderDashboard() {
     tip: `${s.quantidade} cobrança(s) · ${fmtMoney(s.valorCents)}`,
   })), 'Nenhuma cobrança ainda.');
 
-  const nomesOrigem = { PAINEL: 'Novas cobranças (painel)', INTER: 'Importadas do Inter' };
+  const nomesOrigem = { PAINEL: 'Novas cobranças (painel)', INTER: 'Importadas do Inter', MENSAL: 'Boletos do mês' };
   hbars(document.getElementById('chart-origem'), d.porOrigem.map((o, i) => ({
     label: nomesOrigem[o.origem], cor: i ? 'var(--series-2)' : 'var(--series-1)',
     valor: o.valorCents, texto: fmtCompact(o.valorCents), texto2: `${o.quantidade} cobrança(s)`,

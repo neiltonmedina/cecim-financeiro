@@ -8,6 +8,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { WhatsAppProvider } from '../notifications/providers/whatsapp.provider';
 import { ConversationsService } from '../conversations/conversations.service';
 import { telefonesDoCliente } from '../clients/telefones.util';
+import { LotesService } from '../charges/lotes.service';
 
 function startOfDay(date: Date): Date {
   const d = new Date(date);
@@ -30,6 +31,7 @@ export class SchedulerService {
     private readonly notificationsService: NotificationsService,
     private readonly whatsapp: WhatsAppProvider,
     private readonly conversations: ConversationsService,
+    private readonly lotes: LotesService,
   ) {}
 
   /**
@@ -46,6 +48,7 @@ export class SchedulerService {
     // Antes da régua: quem já pagou não recebe lembrete de atraso.
     await this.conversations.sincronizarPagamentosInter().catch((e) => this.logger.error(`Falha ao consultar pagamentos no Inter: ${e.message}`));
     await this.markOverdueCharges();
+    await this.lotes.enviarAvisosAutomaticos().catch((e) => this.logger.error(`Falha no aviso dos boletos do mês: ${e.message}`));
     await this.notificationsService.lembretesDoDiaDoVencimento().catch((e) => this.logger.error(`Falha no lembrete do dia do vencimento: ${e.message}`));
     await this.advanceStaleConversations();
   }

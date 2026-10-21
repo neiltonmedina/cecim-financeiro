@@ -102,6 +102,12 @@ model Charge {
   // De onde veio a cobrança: PAINEL (criada aqui, boleto gerado por nós) ou
   // INTER (boleto já existente no Inter, importado sem gerar boleto novo).
   origem                  String  @default("PAINEL")
+  // Boletos do mês (planilha mensal): identificador da planilha (ex: BOL-001),
+  // dias para pagar depois do vencimento e o lote de onde veio.
+  seuNumero               String?
+  diasAgenda              Int?
+  lote                    LoteMensal? @relation(fields: [loteId], references: [id])
+  loteId                  String?
 
   notifications NotificationLog[]
   conversations Conversation[]
@@ -342,4 +348,18 @@ model RegistroAcao {
   createdAt DateTime @default(now())
 
   @@index([createdAt])
+}
+
+// Planilha mensal enviada pelo painel (substitui o agente de boletos).
+model LoteMensal {
+  id              String   @id @default(uuid())
+  mes             String // AAAA-MM de referência dos vencimentos
+  nomeArquivo     String?
+  diasAntes       Int // aviso "boleto a vencer" X dias antes do vencimento
+  intervalDays    Int // intervalo da régua depois do vencimento
+  envioAutomatico Boolean  @default(true)
+  criadoPor       String?
+  createdAt       DateTime @default(now())
+
+  charges Charge[]
 }

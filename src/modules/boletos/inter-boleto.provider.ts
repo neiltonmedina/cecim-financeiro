@@ -131,10 +131,11 @@ export class InterBoletoProvider {
     const tipoPessoa = documento.length > 11 ? 'JURIDICA' : 'FISICA';
 
     const payload: Record<string, any> = {
-      seuNumero: charge.id.slice(0, 15),
+      // Boletos do mês usam o identificador da planilha (ex: BOL-001), como o agente fazia.
+      seuNumero: (charge.seuNumero || charge.id).slice(0, 15),
       valorNominal: Number((charge.amountCents / 100).toFixed(2)),
       dataVencimento: charge.dueDate.toISOString().slice(0, 10),
-      numDiasAgenda: 60,
+      numDiasAgenda: charge.diasAgenda ?? 60,
       pagador: {
         cpfCnpj: documento,
         tipoPessoa,

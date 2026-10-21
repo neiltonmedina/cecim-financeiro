@@ -5,11 +5,13 @@ import { BoletosModule } from '../boletos/boletos.module';
 import { ChargesController } from './charges.controller';
 import { ChargesService } from './charges.service';
 import { DisparosAgendadosService } from './disparos-agendados.service';
+import { LotesService } from './lotes.service';
+import { LotesController } from './lotes.controller';
 
 @Module({
   imports: [NotificationsModule, ConversationsModule, BoletosModule],
-  controllers: [ChargesController],
-  providers: [ChargesService, DisparosAgendadosService],
-  exports: [ChargesService, DisparosAgendadosService],
+  controllers: [ChargesController, LotesController],
+  providers: [ChargesService, DisparosAgendadosService, LotesService],
+  exports: [ChargesService, DisparosAgendadosService, LotesService],
 })
 export class ChargesModule {}
