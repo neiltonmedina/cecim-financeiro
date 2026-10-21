@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { Response } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ConversationsService } from '../conversations/conversations.service';
+import { BoletosService } from '../boletos/boletos.service';
 
 /** Mapeia os status de entrega da Meta para o enum interno de NotificationLog. */
 const WHATSAPP_STATUS_MAP: Record<string, 'SENT' | 'DELIVERED' | 'READ' | 'FAILED'> = {
@@ -30,6 +31,7 @@ export class WebhooksController {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly conversations: ConversationsService,
+    private readonly boletos: BoletosService,
   ) {}
 
   /** Verificação do webhook exigida pela Meta ao cadastrar a URL no App do WhatsApp. */
@@ -159,8 +161,16 @@ export class WebhooksController {
         this.logger.warn(`Webhook do Inter recebido para cobrança desconhecida: ${codigoSolicitacao}`);
         continue;
       }
-      const valorRecebido = Number(evento?.valorTotalRecebido ?? evento?.cobranca?.valorTotalRecebido ?? 0);
-      if (!(await this.conversations.registrarPagamento(charge.id, Math.round(valorRecebido * 100) || undefined))) continue; // já processado antes
+      // A URL é pública: só dá baixa se o próprio Inter confirmar o pagamento.
+      const confirmado = await this.boletos.pagamentoNoInter(codigoSolicitacao).catch((e) => {
+        this.logger.warn(`Não foi possível confirmar no Inter o pagamento de ${codigoSolicitacao}: ${e.message}`);
+        return { pago: false, valorRecebidoCents: undefined };
+      });
+      if (!confirmado.pago) {
+        this.logger.warn(`Aviso de pagamento de ${codigoSolicitacao} não confirmado pelo Inter - ignorado.`);
+        continue;
+      }
+      if (!(await this.conversations.registrarPagamento(charge.id, confirmado.valorRecebidoCents))) continue; // já processado antes
       this.logger.log(`Cobrança ${charge.id} marcada como PAGA via webhook do Inter (${situacao}).`);
     }
     return { received: true };

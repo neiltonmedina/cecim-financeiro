@@ -1,4 +1,4 @@
-import { Controller, ForbiddenException, HttpCode, Post, Query } from '@nestjs/common';
+import { Controller, ForbiddenException, Get, HttpCode, Post, Query } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { timingSafeEqual } from 'crypto';
@@ -21,6 +21,12 @@ export class CronController {
     private readonly config: ConfigService,
     private readonly scheduler: SchedulerService,
   ) {}
+
+  /** Chamado a cada 10 min pelo cron-job.org: mantém o servidor acordado no plano grátis do Render. */
+  @Get('ping')
+  ping() {
+    return { ok: true };
+  }
 
   @Post('rotina-diaria')
   @HttpCode(200)

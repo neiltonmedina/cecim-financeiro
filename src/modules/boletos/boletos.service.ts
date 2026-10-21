@@ -104,6 +104,12 @@ export class BoletosService {
     return this.inter.consultarBruto(codigoSolicitacao);
   }
 
+  /** Situação real do boleto no Inter - o aviso recebido pela URL pública não é confiável sozinho. */
+  async pagamentoNoInter(codigoSolicitacao: string): Promise<{ pago: boolean; valorRecebidoCents?: number }> {
+    const b = lerCobrancaInter(await this.inter.consultarBruto(codigoSolicitacao));
+    return { pago: SITUACOES_PAGAS.includes(b.situacao), valorRecebidoCents: b.valorRecebidoCents || undefined };
+  }
+
   /** Registra no Inter a URL de callback que recebe a confirmação de pagamento. */
   async registrarWebhookPagamento() {
     if (!this.inter.isConfigured()) {
