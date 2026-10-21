@@ -14,6 +14,8 @@ export class LinhaPlanilhaDto {
   @IsOptional() @IsString() bairro?: string;
   @IsOptional() @IsString() cidade?: string;
   @IsOptional() @IsString() uf?: string;
+  /** WhatsApp do cliente (coluna da planilha ou digitado na conferência). Não vai para o Inter. */
+  @IsOptional() @IsString() telefone?: string;
 }
 
 export class ConferirLoteDto {

@@ -75,3 +75,25 @@ describe('LotesService.enviarAvisosAutomaticos', () => {
     expect(charges.dispatch).toHaveBeenCalledWith({ chargeIds: ['vence20'], channels: ['WHATSAPP'], intervalDays: 5, confirmado: true });
   });
 });
+
+describe('Boletos do mês - telefone digitado na conferência', () => {
+  it('aceita DDD + número e recusa telefone incompleto', () => {
+    expect(normalizarLinha({ ...ELIO, telefone: '94 99111-2222' }, '2026-11', '2026-10-30')).toMatchObject({ telefone: '+5594991112222', erros: [] });
+    expect(normalizarLinha({ ...ELIO, telefone: '1234' }, '2026-11', '2026-10-30').erros.join()).toMatch(/telefone inválido/);
+  });
+
+  it('cliente já cadastrado sem telefone recebe o telefone digitado (o existente nunca é trocado)', async () => {
+    const prisma: any = {
+      loteMensal: { findUnique: jest.fn().mockResolvedValue({ id: 'L1', mes: '2099-11' }) },
+      client: {
+        findMany: jest.fn().mockResolvedValue([{ id: 'cli', name: 'ELIO', document: '04301559000102', cep: '1', endereco: 'r', bairro: 'b', cidade: 'c', uf: 'PA', phoneE164: null, telefonesExtras: [] }]),
+        update: jest.fn().mockImplementation(({ data }) => Promise.resolve({ id: 'cli', name: 'ELIO', ...data, telefonesExtras: [] })),
+      },
+      charge: { findFirst: jest.fn().mockResolvedValue(null), create: jest.fn().mockResolvedValue({ id: 'nova' }) },
+    };
+    const boletos: any = { gerarBoletoParaCobranca: jest.fn().mockResolvedValue({ boletoCodigoSolicitacao: 'cod' }) };
+    const r = await new LotesService(prisma, boletos, {} as any, {} as any).gerarLinha('L1', { ...ELIO, telefone: '94991112222' });
+    expect(prisma.client.update).toHaveBeenCalledWith({ where: { id: 'cli' }, data: { phoneE164: '+5594991112222' } });
+    expect(r).toMatchObject({ status: 'OK', temTelefone: true });
+  });
+});

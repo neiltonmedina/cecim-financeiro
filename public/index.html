@@ -822,6 +822,7 @@ const COLUNAS_MENSAL = {
   cidade: ['cidade', 'municipio'],
   uf: ['uf', 'estado'],
   cep: ['cep'],
+  telefone: ['telefone', 'celular', 'whatsapp', 'fone', 'telefone_whatsapp'],
 };
 const normCol = (t) => String(t ?? '').trim().toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
 let mensalLinhas = [];
@@ -882,7 +883,7 @@ async function conferirMensal() {
   const validas = mensalConferencia.filter((l) => !l.erros.length && !l.jaGerado);
   const comErro = mensalConferencia.filter((l) => l.erros.length);
   const jaGeradas = mensalConferencia.filter((l) => l.jaGerado && !l.erros.length);
-  const semTelefone = validas.filter((l) => !l.cliente?.telefones);
+  const semTelefone = validas.filter((l) => !l.cliente?.telefones && !l.telefone);
   const novos = validas.filter((l) => !l.cliente);
   const total = validas.reduce((t, l) => t + l.valorCents, 0);
   const [ano, m] = mes.split('-');
@@ -891,7 +892,7 @@ async function conferirMensal() {
       <div class="tile good"><div class="t-label">Para gerar</div><div class="t-value">${validas.length}</div><div class="t-sub">${fmtMoney(total)} · vencimentos em ${m}/${ano}</div></div>
       <div class="tile"><div class="t-label">Já gerados neste mês</div><div class="t-value">${jaGeradas.length}</div><div class="t-sub">serão pulados (sem duplicar)</div></div>
       <div class="tile ${comErro.length ? 'critical' : ''}"><div class="t-label">Com erro</div><div class="t-value">${comErro.length}</div><div class="t-sub">corrija na planilha e envie de novo</div></div>
-      <div class="tile"><div class="t-label">Sem telefone</div><div class="t-value">${semTelefone.length}</div><div class="t-sub">boleto sai, mas o aviso não (cadastre o telefone)</div></div>
+      <div class="tile"><div class="t-label">Sem telefone</div><div class="t-value" id="mensal-sem-tel">${semTelefone.length}</div><div class="t-sub">digite o WhatsApp na tabela abaixo (opcional)</div></div>
       <div class="tile"><div class="t-label">Clientes novos</div><div class="t-value">${novos.length}</div><div class="t-sub">serão cadastrados pelo CNPJ</div></div>
     </div>
     <div style="max-height:380px; overflow:auto; border:1px solid var(--border); border-radius:10px;">
@@ -902,7 +903,7 @@ async function conferirMensal() {
       <td style="font-variant-numeric:tabular-nums;">${escHtml(l.documento)}</td>
       <td>${l.valorCents ? fmtMoney(l.valorCents) : '-'}</td>
       <td>${l.vencimento ? l.vencimento.split('-').reverse().join('/') : '-'}</td>
-      <td>${l.cliente ? escHtml(l.cliente.nome) + (l.cliente.telefones ? '' : ' <span style="color:var(--red); font-size:12px;">sem telefone</span>') : '<span class="pill painel">novo</span> <span style="color:var(--red); font-size:12px;">sem telefone</span>'}</td>
+      <td>${l.cliente ? escHtml(l.cliente.nome) : '<span class="pill painel">novo</span>'}${campoTelefoneMensal(l)}</td>
       <td class="mensal-situacao">${l.erros.length ? '<span style="color:var(--red);">⚠ ' + escHtml(l.erros.join('; ')) + '</span>'
         : l.jaGerado && l.semBoleto ? '<span style="color:#8a5a12;">já cadastrado, mas sem boleto - use "Com problema" → Gerar boleto</span>'
         : l.jaGerado ? '<span style="color:var(--muted);">já gerado - pula</span>' : 'pronto para gerar'}</td>
@@ -915,7 +916,32 @@ async function conferirMensal() {
     <div id="mensal-resultado" style="font-size:13px; margin-top:8px;"></div>`;
 }
 
+/** Sem telefone no painel: campo para digitar o WhatsApp antes de gerar (fica salvo no cliente). */
+function campoTelefoneMensal(l) {
+  if (l.cliente?.telefones) return '';
+  const vaiGerar = !l.erros.length && !l.jaGerado;
+  if (!vaiGerar) return ' <span style="color:var(--red); font-size:12px;">sem telefone - cadastre em Clientes</span>';
+  return `<div style="margin-top:4px;"><input class="mensal-tel" data-indice="${l.indice}" placeholder="WhatsApp com DDD (sem telefone)"
+    value="${escHtml(mensalLinhas[l.indice].telefone || '')}" style="max-width:220px; font-size:12.5px; padding:5px 8px;" oninput="telefoneMensal(this)" /></div>`;
+}
+
+function telefoneMensal(input) {
+  const valor = input.value.trim();
+  mensalLinhas[input.dataset.indice].telefone = valor;
+  const ok = !valor || !!telefoneDaPlanilha(valor);
+  input.style.borderColor = ok ? '' : 'var(--red)';
+  input.title = ok ? '' : 'Telefone inválido: use DDD + número, ex: 94992453959';
+  const semTel = [...document.querySelectorAll('.mensal-tel')].filter((el) => !el.value.trim()).length;
+  const el = document.getElementById('mensal-sem-tel');
+  if (el) el.textContent = semTel;
+}
+
 async function gerarBoletosMensal() {
+  const invalidos = [...document.querySelectorAll('.mensal-tel')].filter((el) => el.value.trim() && !telefoneDaPlanilha(el.value));
+  if (invalidos.length) {
+    invalidos[0].focus();
+    return alert(invalidos.length + ' telefone(s) inválido(s) (em vermelho). Corrija ou apague antes de gerar.');
+  }
   const mes = document.getElementById('mensal-mes-ref').value;
   const diasAntes = Number(document.getElementById('mensal-dias-antes').value);
   const intervalDays = Number(document.getElementById('mensal-intervalo').value);

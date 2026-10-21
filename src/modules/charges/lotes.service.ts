@@ -55,6 +55,13 @@ export function vencimentoDoMes(diaBruto: string | undefined, mes: string): stri
   return `${mes}-${String(Math.min(dia, ultimo)).padStart(2, '0')}`;
 }
 
+/** "94 99111-2222", "5594991112222" -> +5594991112222 (vazio se não parece celular/fixo com DDD). */
+export function telefoneDaLinha(bruto: string | undefined): string {
+  let d = soDigitos(bruto);
+  if (d.startsWith('55') && d.length >= 12) d = d.slice(2);
+  return d.length === 10 || d.length === 11 ? `+55${d}` : '';
+}
+
 export interface LinhaNormalizada {
   seuNumero: string;
   nome: string;
@@ -62,6 +69,7 @@ export interface LinhaNormalizada {
   valorCents: number | null;
   vencimento: string | null;
   endereco: { cep: string; endereco: string; numero: string; bairro: string; cidade: string; uf: string };
+  telefone: string;
   erros: string[];
 }
 
@@ -78,6 +86,8 @@ export function normalizarLinha(l: LinhaPlanilhaDto, mes: string, hoje = hojeSao
     documento = documento.padStart(14, '0');
     if (!cnpjValido(documento)) erros.push(`CNPJ inválido: ${documento}`);
   }
+  const telefone = telefoneDaLinha(l.telefone);
+  if (String(l.telefone ?? '').trim() && !telefone) erros.push(`telefone inválido: ${l.telefone} (use DDD + número)`);
   const valorCents = valorEmCentavos(l.valor);
   if (!valorCents || valorCents <= 0) erros.push('valor inválido');
   const vencimento = vencimentoDoMes(l.dia, mes);
@@ -97,6 +107,7 @@ export function normalizarLinha(l: LinhaPlanilhaDto, mes: string, hoje = hojeSao
       cidade: String(l.cidade ?? '').trim() || ENDERECO_PADRAO.cidade,
       uf: normalizarUf(String(l.uf ?? '').trim()) ?? ENDERECO_PADRAO.uf,
     },
+    telefone,
     erros,
   };
 }
@@ -151,6 +162,7 @@ export class LotesService {
         valorCents: l.valorCents,
         vencimento: l.vencimento,
         cliente: cliente ? { id: cliente.id, nome: cliente.name, telefones: telefonesDoCliente(cliente).length } : null,
+        telefone: l.telefone,
         jaGerado: !!existente,
         // Cobrança criada, mas o boleto falhou no Inter: resolve em "Com problema" (Gerar boleto).
         semBoleto: !!existente && !existente.boletoCodigoSolicitacao,
@@ -173,10 +185,14 @@ export class LotesService {
 
     let cliente = (await this.clientesPorDocumento()).get(l.documento);
     if (!cliente) {
-      cliente = await this.prisma.client.create({ data: { name: l.nome, document: l.documento, ...l.endereco, whatsappOptIn: true } });
-    } else if (!cliente.cep || !cliente.endereco || !cliente.bairro || !cliente.cidade || !cliente.uf) {
-      // Cliente do painel sem endereço completo: completa com o da planilha (o Inter exige).
-      cliente = await this.prisma.client.update({ where: { id: cliente.id }, data: l.endereco });
+      cliente = await this.prisma.client.create({
+        data: { name: l.nome, document: l.documento, ...l.endereco, phoneE164: l.telefone || null, whatsappOptIn: true },
+      });
+    } else {
+      const semEndereco = !cliente.cep || !cliente.endereco || !cliente.bairro || !cliente.cidade || !cliente.uf;
+      // Completa só o que falta: endereço (o Inter exige) e telefone (nunca troca o já cadastrado).
+      const completar = { ...(semEndereco ? l.endereco : {}), ...(l.telefone && !cliente.phoneE164 ? { phoneE164: l.telefone } : {}) };
+      if (Object.keys(completar).length) cliente = await this.prisma.client.update({ where: { id: cliente.id }, data: completar });
     }
 
     const existente = await this.jaGerado(cliente.id, l.vencimento!, l.valorCents!);
