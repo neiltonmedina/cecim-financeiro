@@ -331,3 +331,15 @@ model DisparoAgendado {
 
   @@index([status, executarEm])
 }
+
+// Quem fez o quê no painel (cadastros, disparos, baixas, modelos...).
+model RegistroAcao {
+  id        String   @id @default(uuid())
+  userId    String?
+  userName  String?
+  acao      String
+  detalhe   String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}

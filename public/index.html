@@ -300,6 +300,7 @@
       <div class="section">Gestão</div>
       <button id="tab-btn-report" onclick="switchTab('report')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Relatório</span></button>
       <button id="tab-btn-messages" onclick="switchTab('messages')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg><span>Modelos de mensagem</span></button>
+      <button id="tab-btn-equipe" onclick="switchTab('equipe')" style="display:none;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/></svg><span>Equipe</span></button>
     </nav>
     <div id="health-bar"></div>
   </aside>
@@ -569,6 +570,27 @@
       </div>
       <div id="messages-content" class="loading">Carregando...</div>
     </div>
+
+    <div id="tab-equipe" class="tab" style="display:none;">
+      <div class="card">
+        <div class="card-head"><div><h3>Usuários do painel</h3><div class="hint">Cada pessoa entra com o próprio e-mail e senha. Operador usa o painel normalmente; administrador também gerencia a equipe e vê o registro de ações.</div></div></div>
+        <div id="usuarios-lista" class="loading">Carregando...</div>
+        <h4 style="margin:18px 0 8px;">Adicionar usuário</h4>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px;">
+          <input id="novo-usuario-nome" placeholder="Nome" />
+          <input id="novo-usuario-email" type="email" placeholder="E-mail" />
+          <input id="novo-usuario-senha" type="text" placeholder="Senha inicial (mín. 8)" />
+          <select id="novo-usuario-perfil"><option value="OPERADOR">Operador</option><option value="ADMIN">Administrador</option></select>
+        </div>
+        <button style="margin-top:12px;" onclick="criarUsuario()">Adicionar usuário</button>
+        <div id="novo-usuario-msg" style="font-size:13px; margin-top:8px;"></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><div><h3>Registro de ações</h3><div class="hint">Quem fez o quê no painel: cadastros, disparos, baixas, boletos e modelos (últimas 300 ações).</div></div></div>
+        <div class="filters"><select id="registro-usuario" onchange="loadRegistro()"><option value="">Todos os usuários</option></select></div>
+        <div id="registro-lista" class="loading">Carregando...</div>
+      </div>
+    </div>
   </main>
   </div>
 </div>
@@ -581,6 +603,7 @@
 const API = ''; // mesma origem
 let token = localStorage.getItem('cecim_token') || '';
 let userName = localStorage.getItem('cecim_user') || '';
+let userRole = localStorage.getItem('cecim_role') || '';
 
 function fmtMoney(cents) {
   return (cents / 100).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -627,6 +650,8 @@ async function doLogin() {
     userName = data.user?.name || data.user?.email || email;
     localStorage.setItem('cecim_token', token);
     localStorage.setItem('cecim_user', userName);
+    userRole = data.user?.role || '';
+    localStorage.setItem('cecim_role', userRole);
     showApp();
   } catch (e) {
     errorEl.textContent = 'Login inválido. Confira o e-mail e a senha.';
@@ -637,6 +662,7 @@ function logout() {
   token = '';
   localStorage.removeItem('cecim_token');
   localStorage.removeItem('cecim_user');
+  localStorage.removeItem('cecim_role');
   document.getElementById('app').style.display = 'none';
   document.getElementById('login-screen').style.display = 'block';
 }
@@ -683,6 +709,13 @@ function showApp() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('app').classList.add('visible');
   document.getElementById('user-name').textContent = userName;
+  document.getElementById('tab-btn-equipe').style.display = userRole === 'ADMIN' ? '' : 'none';
+  // Perfil atualizado pelo servidor (login antigo sem perfil salvo, ou perfil alterado).
+  api('/auth/me').then((me) => {
+    userRole = me.role;
+    localStorage.setItem('cecim_role', userRole);
+    document.getElementById('tab-btn-equipe').style.display = userRole === 'ADMIN' ? '' : 'none';
+  }).catch(() => {});
   switchTab('dashboard');
   loadHealth();
   atualizarBadgeProblemas();
@@ -716,6 +749,92 @@ async function prepararApp() {
     api('/push/inscrever', { method: 'POST', body: JSON.stringify(inscrito) }).catch(() => {});
   } else if (Notification.permission !== 'denied') {
     btn.style.display = '';
+  }
+}
+
+// ---------- Equipe (usuários) e registro de ações ----------
+let usuariosCache = [];
+
+async function loadUsuarios() {
+  const el = document.getElementById('usuarios-lista');
+  try {
+    usuariosCache = await api('/usuarios');
+  } catch (e) {
+    el.innerHTML = '<div class="empty">' + e.message + '</div>';
+    return;
+  }
+  el.className = '';
+  el.innerHTML = '<div style="overflow-x:auto;"><table><thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Situação</th><th></th></tr></thead><tbody>' +
+    usuariosCache.map((u) => `<tr>
+      <td>${escHtml(u.name)}</td><td>${escHtml(u.email)}</td>
+      <td>${u.role === 'ADMIN' ? 'Administrador' : 'Operador'}</td>
+      <td>${u.active ? '<span class="pill" style="background:var(--green-soft); color:var(--green);">Ativo</span>' : '<span class="pill" style="background:#eef1f6; color:var(--muted);">Desativado</span>'}</td>
+      <td style="white-space:nowrap;">
+        <button class="secondary" style="padding:4px 10px; font-size:12px;" onclick="redefinirSenhaUsuario('${u.id}')">Nova senha</button>
+        <button class="secondary" style="padding:4px 10px; font-size:12px;" onclick="alterarUsuario('${u.id}', { active: ${!u.active} })">${u.active ? 'Desativar' : 'Reativar'}</button>
+      </td></tr>`).join('') + '</tbody></table></div>';
+  const sel = document.getElementById('registro-usuario');
+  const atual = sel.value;
+  sel.innerHTML = '<option value="">Todos os usuários</option>' + usuariosCache.map((u) => `<option value="${u.id}">${escHtml(u.name)}</option>`).join('');
+  sel.value = atual;
+}
+
+async function criarUsuario() {
+  const msg = document.getElementById('novo-usuario-msg');
+  msg.style.color = '';
+  const body = {
+    name: document.getElementById('novo-usuario-nome').value.trim(),
+    email: document.getElementById('novo-usuario-email').value.trim(),
+    password: document.getElementById('novo-usuario-senha').value,
+    role: document.getElementById('novo-usuario-perfil').value,
+  };
+  if (!body.name || !body.email || body.password.length < 8) {
+    msg.style.color = 'var(--red)';
+    msg.textContent = 'Preencha nome, e-mail e uma senha com pelo menos 8 caracteres.';
+    return;
+  }
+  try {
+    await api('/usuarios', { method: 'POST', body: JSON.stringify(body) });
+    ['nome', 'email', 'senha'].forEach((f) => (document.getElementById('novo-usuario-' + f).value = ''));
+    msg.textContent = `Usuário criado. Passe para ${body.name} o e-mail e a senha inicial; depois ele(a) pode trocar em "Trocar senha".`;
+    loadUsuarios();
+    loadRegistro();
+  } catch (e) {
+    msg.style.color = 'var(--red)';
+    msg.textContent = 'Erro: ' + e.message;
+  }
+}
+
+async function alterarUsuario(id, dados) {
+  if (dados.active === false && !confirm('Desativar este usuário? Ele perde o acesso ao painel na hora.')) return;
+  try {
+    await api('/usuarios/' + id, { method: 'PATCH', body: JSON.stringify(dados) });
+    loadUsuarios();
+    loadRegistro();
+  } catch (e) {
+    alert('Erro: ' + e.message);
+  }
+}
+
+function redefinirSenhaUsuario(id) {
+  const senha = prompt('Nova senha para este usuário (mínimo 8 caracteres):');
+  if (senha === null) return;
+  if (senha.length < 8) return alert('A senha precisa ter pelo menos 8 caracteres.');
+  alterarUsuario(id, { password: senha });
+}
+
+async function loadRegistro() {
+  const el = document.getElementById('registro-lista');
+  const userId = document.getElementById('registro-usuario').value;
+  try {
+    const itens = await api('/registro-acoes' + (userId ? '?userId=' + userId : ''));
+    el.className = '';
+    el.innerHTML = !itens.length ? '<div class="empty">Nenhuma ação registrada ainda.</div>'
+      : '<div style="overflow-x:auto;"><table><thead><tr><th>Quando</th><th>Quem</th><th>Ação</th><th>Detalhe</th></tr></thead><tbody>' +
+        itens.map((r) => `<tr><td style="white-space:nowrap;">${fmtDateTime(r.createdAt)}</td><td>${escHtml(r.userName || '-')}</td><td>${escHtml(r.acao)}</td><td>${escHtml(r.detalhe || '')}</td></tr>`).join('') +
+        '</tbody></table></div>';
+  } catch (e) {
+    el.innerHTML = '<div class="empty">' + e.message + '</div>';
   }
 }
 
@@ -860,6 +979,7 @@ const PAGINAS = {
   conversations: ['Respostas dos clientes', 'Conversas do agente de cobrança no WhatsApp'],
   report: ['Relatório', 'Resultado do agente de cobrança no período'],
   messages: ['Modelos de mensagem', 'Textos usados nos envios'],
+  equipe: ['Equipe', 'Usuários do painel e registro de quem fez cada ação'],
 };
 
 function switchTab(name) {
@@ -877,6 +997,7 @@ function switchTab(name) {
   if (name === 'inter') { prepararFiltroInter(); loadCharges('INTER'); verificarAvisoInter(); }
   if (name === 'conversations') loadConversations();
   if (name === 'messages') loadTemplates();
+  if (name === 'equipe') { loadUsuarios(); loadRegistro(); }
   if (name === 'report') loadOfertas();
   if (name === 'report') {
     const mes = document.getElementById('mensal-mes');

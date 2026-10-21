@@ -18,6 +18,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { SystemModule } from './modules/system/system.module';
 import { LegalController } from './legal.controller';
 import { PushModule } from './modules/push/push.module';
+import { RegistroModule } from './modules/registro/registro.module';
 
 @Module({
   controllers: [LegalController],
@@ -31,6 +32,7 @@ import { PushModule } from './modules/push/push.module';
     }),
     PrismaModule,
     PushModule,
+    RegistroModule,
     AuthModule,
     ClientsModule,
     TemplatesModule,
