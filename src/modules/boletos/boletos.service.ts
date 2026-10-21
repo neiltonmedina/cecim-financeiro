@@ -1,3 +1,4 @@
+import JSZip from 'jszip';
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Charge, Client } from '@prisma/client';
@@ -220,6 +221,38 @@ export class BoletosService {
       }
     }
     return pagas;
+  }
+
+  /**
+   * ZIP com os PDFs dos boletos escolhidos (nome do arquivo como o agente:
+   * NOME_CNPJ.pdf). Boleto sem PDF guardado é buscado no Inter e guardado.
+   */
+  async zipDosBoletos(chargeIds: string[]): Promise<{ zip: Buffer; incluidos: number; semPdf: string[] }> {
+    const charges = await this.prisma.charge.findMany({
+      where: { id: { in: chargeIds } },
+      select: { id: true, boletoPdfBase64: true, boletoCodigoSolicitacao: true, client: { select: { name: true, document: true } } },
+      orderBy: { dueDate: 'asc' },
+    });
+    const zip = new JSZip();
+    const usados = new Set<string>();
+    const semPdf: string[] = [];
+    for (const c of charges) {
+      let pdf = c.boletoPdfBase64;
+      if (!pdf && c.boletoCodigoSolicitacao && this.inter.isConfigured()) {
+        pdf = (await this.inter.baixarPdf(c.boletoCodigoSolicitacao).catch(() => undefined)) ?? null;
+        if (pdf) await this.prisma.charge.update({ where: { id: c.id }, data: { boletoPdfBase64: pdf } });
+      }
+      if (!pdf) {
+        semPdf.push(c.client.name);
+        continue;
+      }
+      const base = `${c.client.name.replace(/[\\/*?:"<>|]/g, '').trim().replace(/\s+/g, '_') || 'cliente'}_${soDigitos(c.client.document)}`;
+      let nome = `${base}.pdf`;
+      for (let seq = 2; usados.has(nome); seq++) nome = `${base}_${seq}.pdf`;
+      usados.add(nome);
+      zip.file(nome, Buffer.from(pdf, 'base64'));
+    }
+    return { zip: await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }), incluidos: usados.size, semPdf };
   }
 
   /** Cancela (baixa) o boleto no Inter. Lança erro traduzido se o Inter recusar. */

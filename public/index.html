@@ -489,6 +489,12 @@
           <button onclick="confirmarCampanha()">Confirmar e disparar</button>
           <button class="secondary" onclick="abrirAgendamento()">🕒 Agendar disparo</button>
         </div>
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; flex-wrap:wrap;">
+          <strong id="pdf-contagem" style="font-size:13px;">0 boleto(s) marcado(s) para baixar</strong>
+          <button class="secondary" onclick="baixarBoletos(false)">⬇ Baixar selecionados</button>
+          <button class="secondary" onclick="baixarBoletos(true)">⬇ Baixar todos da lista</button>
+          <span style="font-size:12px; color:var(--muted);">Marque na coluna PDF. Sai um arquivo .zip com um PDF por cliente; 📄 abre um boleto só.</span>
+        </div>
         <div id="agendados-MENSAL"></div>
         <div id="charges-content-MENSAL" class="loading">Carregando...</div>
       </div>
@@ -952,6 +958,35 @@ async function gerarBoletosMensal() {
   loadCharges('MENSAL');
   loadLotes();
   atualizarBadgeProblemas();
+}
+
+function atualizarContagemPdf() {
+  const n = document.querySelectorAll('.pdf-sel:checked').length;
+  const el = document.getElementById('pdf-contagem');
+  if (el) el.textContent = n + ' boleto(s) marcado(s) para baixar';
+}
+
+async function baixarBoletos(todos) {
+  const sel = [...document.querySelectorAll(todos ? '.pdf-sel:not(:disabled)' : '.pdf-sel:checked')].map((c) => c.dataset.id);
+  if (!sel.length) return alert(todos ? 'Nenhum boleto com PDF nesta lista.' : 'Marque na coluna PDF os boletos que quer baixar.');
+  try {
+    const res = await fetch(API + '/boletos/zip', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({ chargeIds: sel }),
+    });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || 'falha ao gerar o arquivo');
+    const semPdf = decodeURIComponent(res.headers.get('X-Sem-Pdf') || '');
+    const url = URL.createObjectURL(await res.blob());
+    const a = Object.assign(document.createElement('a'), { href: url, download: `boletos-${new Date().toISOString().slice(0, 10)}.zip` });
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    if (semPdf) alert('Baixado. Sem PDF disponível (ficaram de fora): ' + semPdf);
+  } catch (e) {
+    alert('Não foi possível baixar: ' + e.message);
+  }
 }
 
 async function loadLotes() {
@@ -2045,7 +2080,12 @@ async function loadCharges(origem = chargesOrigem) {
         : 'Nenhuma cobrança criada no painel.') + '</div>';
       return;
     }
-    let html = '<table><thead><tr><th></th><th>Cliente</th><th>WhatsApp</th><th>Descrição</th><th>Valor</th><th>Vencimento</th><th>Status</th></tr></thead><tbody>';
+    // Boletos do mês: coluna própria para escolher os PDFs a baixar (independe da seleção de disparo,
+    // então dá para baixar também o boleto de quem está sem telefone).
+    const comPdf = origem === 'MENSAL';
+    let html = '<table><thead><tr><th></th>' +
+      (comPdf ? '<th title="Marque os boletos para baixar"><label style="display:flex; gap:4px; align-items:center; cursor:pointer;"><input type="checkbox" onclick="document.querySelectorAll(\'.pdf-sel:not(:disabled)\').forEach((c) => (c.checked = this.checked)); atualizarContagemPdf()" />PDF</label></th>' : '') +
+      '<th>Cliente</th><th>WhatsApp</th><th>Descrição</th><th>Valor</th><th>Vencimento</th><th>Status</th></tr></thead><tbody>';
     for (const c of charges) {
       const semTelefone = !c.client?.phoneE164;
       const semBoleto = !c.linhaDigitavel && !c.pixCopiaECola;
@@ -2069,6 +2109,7 @@ async function loadCharges(origem = chargesOrigem) {
         : fmtDate(c.dueDate);
       html += `<tr>
         <td><input type="checkbox" ${disabled} onchange="toggleChargeSelection('${c.id}', this.checked)" /></td>
+        ${comPdf ? `<td style="white-space:nowrap;"><input type="checkbox" class="pdf-sel" data-id="${c.id}" ${c.boletoCodigoSolicitacao ? '' : 'disabled title="Sem boleto gerado"'} onchange="atualizarContagemPdf()" />${c.boletoCodigoSolicitacao ? ` <a href="/boletos/${c.id}" target="_blank" title="Abrir o PDF" style="text-decoration:none;">📄</a>` : ''}</td>` : ''}
         <td>${escHtml(c.client?.name ?? '-')}${avisoBoleto}</td>
         <td>${telefoneCell}</td>
         <td>${escHtml(c.description)}</td>
