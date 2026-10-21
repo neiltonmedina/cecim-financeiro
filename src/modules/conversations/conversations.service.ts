@@ -6,6 +6,7 @@ import { WhatsAppProvider } from '../notifications/providers/whatsapp.provider';
 import { EmailSmtpProvider } from '../notifications/providers/email-smtp.provider';
 import { ClaudeAgentService, filtrarRespostaDoAgente } from './claude-agent.service';
 import { BoletosService } from '../boletos/boletos.service';
+import { PushService } from '../push/push.service';
 import { buildTemplateContext, formatCurrencyBRL, formatDateBR, parametrosDoModelo } from '../notifications/utils/template-renderer.util';
 
 function normalizePhone(raw: string): string {
@@ -37,6 +38,7 @@ export class ConversationsService {
     private readonly agent: ClaudeAgentService,
     private readonly config: ConfigService,
     private readonly boletos: BoletosService,
+    private readonly push: PushService,
   ) {}
 
   /** Cria (se ainda não existir) a conversa de cobrança para uma cobrança recém-disparada por WhatsApp. */
@@ -99,6 +101,8 @@ export class ConversationsService {
       data: { status: 'PAGA', paidAt: new Date() },
     });
     if (!count) return false;
+    const pago = await this.prisma.charge.findUnique({ where: { id: chargeId }, include: { client: true } });
+    await this.push.notificar('💰 Pagamento confirmado', `${pago?.client.name ?? 'Cliente'} pagou ${formatCurrencyBRL(valorRecebidoCents || pago?.amountCents || 0)}.`, 'charges');
     const contatado = (await this.prisma.conversation.count({ where: { chargeId } })) > 0;
     await this.encerrarPorPagamento(chargeId);
     if (contatado) await this.enviarConfirmacaoPagamento(chargeId, valorRecebidoCents);
@@ -401,6 +405,7 @@ export class ConversationsService {
   }
 
   private async notifyHumanEscalation(clientName: string, phone: string, lastMessage: string, chargeDesc?: string) {
+    await this.push.notificar('💬 Mensagem para verificar', `${clientName}: "${lastMessage.slice(0, 120)}"`, 'conversations');
     const escalationEmail = this.config.get<string>('escalationEmail');
     if (!escalationEmail) return;
 

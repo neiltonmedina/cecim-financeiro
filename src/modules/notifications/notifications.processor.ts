@@ -8,6 +8,7 @@ import { NOTIFICATIONS_QUEUE } from './notifications.constants';
 import { WhatsAppProvider } from './providers/whatsapp.provider';
 import { SmsTwilioProvider } from './providers/sms-twilio.provider';
 import { EmailSmtpProvider } from './providers/email-smtp.provider';
+import { PushService } from '../push/push.service';
 import { ChannelProvider } from './interfaces/channel-provider.interface';
 import { buildTemplateContext, parametrosDoModelo, payloadsDosBotoes, renderTemplate, TemplateContext } from './utils/template-renderer.util';
 
@@ -25,6 +26,7 @@ export class NotificationsProcessor extends WorkerHost {
     whatsappProvider: WhatsAppProvider,
     smsProvider: SmsTwilioProvider,
     emailProvider: EmailSmtpProvider,
+    private readonly push: PushService,
   ) {
     super();
     this.providers = {
@@ -141,6 +143,10 @@ export class NotificationsProcessor extends WorkerHost {
         where: { id: log.id },
         data: { status: 'FAILED', errorMessage: error.message, failedAt: new Date() },
       });
+      // Avisa no celular só na primeira falha (as novas tentativas não repetem o aviso).
+      if (log.status !== 'FAILED') {
+        await this.push.notificar('⚠️ Envio com problema', `${log.charge.client.name}: a cobrança não foi enviada. Veja a aba Com problema.`, 'problemas');
+      }
       throw error; // permite que o BullMQ reprocesse conforme política de retry/backoff
     }
   }

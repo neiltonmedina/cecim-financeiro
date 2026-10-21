@@ -299,3 +299,18 @@ model ProcessedWhatsAppMessage {
   id        String   @id
   createdAt DateTime @default(now())
 }
+
+// Aparelhos (iPhone/navegador) que ativaram as notificações do painel instalado como app.
+model PushSubscription {
+  id        String   @id @default(uuid())
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+}
+
+// Configurações geradas pelo próprio sistema (ex: chaves das notificações push).
+model AppSetting {
+  key   String @id
+  value String
+}

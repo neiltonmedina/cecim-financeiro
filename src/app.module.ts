@@ -17,6 +17,7 @@ import { SchedulerModule } from './modules/scheduler/scheduler.module';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { SystemModule } from './modules/system/system.module';
 import { LegalController } from './legal.controller';
+import { PushModule } from './modules/push/push.module';
 
 @Module({
   controllers: [LegalController],
@@ -29,6 +30,7 @@ import { LegalController } from './legal.controller';
       serveRoot: '/painel',
     }),
     PrismaModule,
+    PushModule,
     AuthModule,
     ClientsModule,
     TemplatesModule,

@@ -12,7 +12,7 @@ describe('NotificationsProcessor.enviarNotificacao - duplicatas', () => {
       },
     };
     const whatsapp: any = { send: jest.fn() };
-    const processor = new NotificationsProcessor(prisma, {} as any, whatsapp, {} as any, {} as any);
+    const processor = new NotificationsProcessor(prisma, {} as any, whatsapp, {} as any, {} as any, { notificar: jest.fn() } as any);
 
     await processor.enviarNotificacao('velho');
 

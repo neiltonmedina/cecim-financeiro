@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>CECIM - Painel de Cobrança</title>
 <link rel="icon" href="logo.png" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="icon-180.png" />
+<meta name="theme-color" content="#14296b" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<meta name="apple-mobile-web-app-title" content="CECIM" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -190,6 +197,7 @@
     .sidebar nav.tabs .section, #health-bar { display: none; }
     .sidebar nav.tabs button { white-space: nowrap; }
     header.topbar { padding: 12px 16px; flex-wrap: wrap; }
+    header .actions { flex-wrap: wrap; flex-shrink: 1; gap: 8px; }
     main { padding: 16px; }
   }
 
@@ -304,6 +312,7 @@
     </div>
     <div class="actions">
       <span id="user-name"></span>
+      <button class="secondary" id="btn-notificacoes" style="display:none" onclick="ativarNotificacoes()">🔔 Ativar notificações</button>
       <button class="secondary" onclick="openChangePassword()">Trocar senha</button>
       <button class="secondary" onclick="logout()">Sair</button>
     </div>
@@ -651,6 +660,61 @@ function showApp() {
   loadHealth();
   atualizarBadgeProblemas();
   setInterval(atualizarBadgeProblemas, 60000);
+  prepararApp();
+}
+
+// ---------- Painel como app (iPhone/Android) e notificações ----------
+const instaladoComoApp = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+const ehIPhone = /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+async function prepararApp() {
+  if (!('serviceWorker' in navigator)) return;
+  try { await navigator.serviceWorker.register('sw.js'); } catch (e) { return; }
+  navigator.serviceWorker.addEventListener('message', (ev) => ev.data && ev.data.aba && switchTab(ev.data.aba));
+  const aba = location.hash.slice(1);
+  if (aba && document.querySelector(`[onclick="switchTab('${aba}')"]`)) switchTab(aba);
+  const btn = document.getElementById('btn-notificacoes');
+  // No iPhone as notificações só existem com o painel instalado na Tela de Início.
+  if (ehIPhone && !instaladoComoApp) {
+    btn.style.display = '';
+    btn.textContent = '📲 Instalar no iPhone';
+    btn.onclick = () => alert('Para instalar o painel como app:\n\n1. Toque no botão Compartilhar do Safari (quadrado com a seta para cima).\n2. Toque em "Adicionar à Tela de Início".\n3. Abra o app CECIM pela Tela de Início e toque em "Ativar notificações".');
+    return;
+  }
+  if (!('PushManager' in window) || !('Notification' in window)) return;
+  const reg = await navigator.serviceWorker.ready;
+  const inscrito = Notification.permission === 'granted' && (await reg.pushManager.getSubscription());
+  if (inscrito) {
+    // Reenvia a inscrição (o servidor pode ter perdido ou o aparelho renovado).
+    api('/push/inscrever', { method: 'POST', body: JSON.stringify(inscrito) }).catch(() => {});
+  } else if (Notification.permission !== 'denied') {
+    btn.style.display = '';
+  }
+}
+
+function chaveParaBytes(base64) {
+  const pad = '='.repeat((4 - (base64.length % 4)) % 4);
+  const bin = atob((base64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+}
+
+async function ativarNotificacoes() {
+  const btn = document.getElementById('btn-notificacoes');
+  try {
+    if ((await Notification.requestPermission()) !== 'granted') {
+      alert('As notificações foram bloqueadas. Para ativar: Ajustes do iPhone → Notificações → CECIM.');
+      return;
+    }
+    const reg = await navigator.serviceWorker.ready;
+    const { chave } = await api('/push/chave-publica');
+    const sub = (await reg.pushManager.getSubscription())
+      || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: chaveParaBytes(chave) }));
+    await api('/push/inscrever', { method: 'POST', body: JSON.stringify(sub) });
+    await api('/push/teste', { method: 'POST' });
+    btn.style.display = 'none';
+  } catch (e) {
+    alert('Não foi possível ativar as notificações: ' + e.message);
+  }
 }
 
 async function loadHealth() {

@@ -6,7 +6,7 @@ function setup() {
     client: { findMany: jest.fn().mockResolvedValue([]) },
   };
   const whatsapp: any = { send: jest.fn() };
-  const service = new ConversationsService(prisma, whatsapp, {} as any, {} as any, {} as any, {} as any);
+  const service = new ConversationsService(prisma, whatsapp, {} as any, {} as any, {} as any, {} as any, { notificar: jest.fn() } as any);
   return { service, prisma, whatsapp };
 }
 
@@ -59,7 +59,7 @@ describe('ConversationsService - opções 1 (Pix) e 2 (boleto)', () => {
         atualizado: false,
       }),
     };
-    const service = new ConversationsService(prisma, whatsapp, {} as any, {} as any, {} as any, boletos);
+    const service = new ConversationsService(prisma, whatsapp, {} as any, {} as any, {} as any, boletos, { notificar: jest.fn() } as any);
     return { service, whatsapp, boletos };
   }
 
@@ -103,7 +103,7 @@ describe('ConversationsService - opção 2 com boleto vencido', () => {
         atualizado: true,
       }),
     };
-    const service = new ConversationsService(prisma, whatsapp, {} as any, {} as any, {} as any, boletos);
+    const service = new ConversationsService(prisma, whatsapp, {} as any, {} as any, {} as any, boletos, { notificar: jest.fn() } as any);
 
     await service.handleInboundWhatsApp('5599991646386', '2', 'wamid.3');
 
@@ -122,7 +122,7 @@ describe('ConversationsService.ensureConversationForCharge - intervalo da régua
         create: jest.fn().mockImplementation(({ data }) => Promise.resolve(data)),
       },
     };
-    return { prisma, service: new ConversationsService(prisma, {} as any, {} as any, {} as any, {} as any, {} as any) };
+    return { prisma, service: new ConversationsService(prisma, {} as any, {} as any, {} as any, {} as any, {} as any, {} as any) };
   }
 
   it('reenvio sem intervalo mantém o intervalo que a régua já tinha', async () => {
@@ -158,7 +158,7 @@ describe('ConversationsService - mesmo WhatsApp para duas empresas', () => {
       conversationMessage: { create: jest.fn() },
     };
     const whatsapp: any = { send: jest.fn().mockResolvedValue({}) };
-    const service = new ConversationsService(prisma, whatsapp, {} as any, {} as any, {} as any, {} as any);
+    const service = new ConversationsService(prisma, whatsapp, {} as any, {} as any, {} as any, {} as any, { notificar: jest.fn() } as any);
 
     await service.handleInboundWhatsApp('5594988060316', '1', 'wamid.x');
 
@@ -196,7 +196,7 @@ describe('ConversationsService - botões Pix e Boleto', () => {
         charge: cobranca, valor: { diasAtraso: 0, multaCents: 0, jurosCents: 0, totalCents: 500 }, atualizado: false,
       }),
     };
-    const service = new ConversationsService(prisma, whatsapp, {} as any, {} as any, {} as any, boletos);
+    const service = new ConversationsService(prisma, whatsapp, {} as any, {} as any, {} as any, boletos, { notificar: jest.fn() } as any);
     return { service, prisma, whatsapp };
   }
 
@@ -247,7 +247,7 @@ describe('ConversationsService.registrarPagamento - agradecimento', () => {
       conversationMessage: { create: jest.fn() },
     };
     const whatsapp: any = { send: jest.fn().mockResolvedValue({}) };
-    const service = new ConversationsService(prisma, whatsapp, {} as any, {} as any, {} as any, {} as any);
+    const service = new ConversationsService(prisma, whatsapp, {} as any, {} as any, {} as any, {} as any, { notificar: jest.fn() } as any);
     return { service, whatsapp };
   }
 
