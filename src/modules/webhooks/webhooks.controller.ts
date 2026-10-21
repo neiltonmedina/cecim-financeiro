@@ -97,6 +97,10 @@ export class WebhooksController {
       return;
     }
 
+    // Os avisos da Meta podem chegar fora de ordem: "entregue" depois de "lida" não volta o status.
+    const ORDEM = ['SENT', 'DELIVERED', 'READ'];
+    if (ORDEM.indexOf(mapped) >= 0 && ORDEM.indexOf(mapped) < ORDEM.indexOf(log.status)) return;
+
     const data: any = { status: mapped };
     if (mapped === 'DELIVERED') data.deliveredAt = new Date();
     if (mapped === 'READ') data.readAt = new Date();

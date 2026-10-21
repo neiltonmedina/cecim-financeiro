@@ -21,3 +21,24 @@ describe('WebhooksController - aviso de pagamento do Inter', () => {
     expect(conversations.registrarPagamento).not.toHaveBeenCalled();
   });
 });
+
+describe('WebhooksController - status de leitura do WhatsApp', () => {
+  function setupStatus(atual: string) {
+    const prisma: any = {
+      notificationLog: { findFirst: jest.fn().mockResolvedValue({ id: 'l1', status: atual }), update: jest.fn() },
+    };
+    return { controller: new WebhooksController(prisma, {} as any, {} as any, {} as any), prisma };
+  }
+
+  it('marca como lida', async () => {
+    const { controller, prisma } = setupStatus('DELIVERED');
+    await (controller as any).applyWhatsAppStatus('wamid.1', 'read');
+    expect(prisma.notificationLog.update.mock.calls[0][0].data.status).toBe('READ');
+  });
+
+  it('"entregue" que chega atrasado não desfaz o "lida"', async () => {
+    const { controller, prisma } = setupStatus('READ');
+    await (controller as any).applyWhatsAppStatus('wamid.1', 'delivered');
+    expect(prisma.notificationLog.update).not.toHaveBeenCalled();
+  });
+});

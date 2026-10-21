@@ -1935,7 +1935,16 @@ function iconeEnvio(c) {
   const estilo = 'border:none; background:none; padding:0 0 0 6px; font-size:15px; cursor:pointer; vertical-align:middle;';
   if (n.status === 'FAILED') return `<button style="${estilo}" title="Não enviado - clique para ver o motivo" onclick="mostrarErroEnvio('${c.id}')">⚠️</button>`;
   if (n.status === 'QUEUED' || n.status === 'SENDING') return `<button style="${estilo}" title="Na fila de envio" onclick="mostrarErroEnvio('${c.id}')">⏳</button>`;
-  return '';
+  // Entregue/lida: vale o melhor resultado entre os telefones da empresa.
+  const lida = c.notifications.find((x) => x.status === 'READ');
+  const entregue = c.notifications.find((x) => x.status === 'DELIVERED');
+  const enviada = c.notifications.find((x) => x.status === 'SENT');
+  const [ico, cor, texto] = lida ? ['✓✓', '#2b8ae6', 'Lida pelo cliente em ' + fmtDateTime(lida.readAt)]
+    : entregue ? ['✓✓', 'var(--muted)', 'Entregue no WhatsApp do cliente em ' + fmtDateTime(entregue.deliveredAt) + ' (ainda não lida)']
+    : enviada ? ['✓', 'var(--muted)', 'Enviada em ' + fmtDateTime(enviada.sentAt) + ' (ainda não entregue)']
+    : [null];
+  if (!ico) return '';
+  return `<button style="${estilo} font-size:13px; font-weight:700; color:${cor}; letter-spacing:-2px;" title="${texto}" onclick="alert('${texto}')">${ico}</button>`;
 }
 
 function mostrarErroEnvio(chargeId) {

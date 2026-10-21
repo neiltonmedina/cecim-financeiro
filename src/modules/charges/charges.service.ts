@@ -65,9 +65,10 @@ export class ChargesService {
   findAll(params: { status?: ChargeStatus; clientId?: string; origem?: string }) {
     return this.prisma.charge.findMany({
       where: { status: params.status, clientId: params.clientId, origem: params.origem || undefined },
-      // Último envio de WhatsApp: o painel mostra um alerta quando ele falhou.
+      // Últimos envios de WhatsApp: o painel mostra alerta quando o último falhou
+      // e ✓✓ quando foi entregue/lido (vários telefones da empresa = vários envios).
       omit: { boletoPdfBase64: true },
-      include: { client: true, notifications: { where: { channel: 'WHATSAPP' }, orderBy: { queuedAt: 'desc' }, take: 1 } },
+      include: { client: true, notifications: { where: { channel: 'WHATSAPP' }, orderBy: { queuedAt: 'desc' }, take: 10 } },
       orderBy: { dueDate: 'asc' },
     });
   }
