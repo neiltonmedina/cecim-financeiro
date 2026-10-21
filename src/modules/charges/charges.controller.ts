@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { ChargeStatus } from '@prisma/client';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -7,13 +7,18 @@ import { CreateChargeDto } from './dto/create-charge.dto';
 import { CreateBulkChargesDto } from './dto/create-bulk-charges.dto';
 import { DispatchChargesDto } from './dto/dispatch-charges.dto';
 import { UpdateChargeDto } from './dto/update-charge.dto';
+import { AgendarDisparoDto } from './dto/agendar-disparo.dto';
+import { DisparosAgendadosService } from './disparos-agendados.service';
 
 @ApiTags('charges')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('charges')
 export class ChargesController {
-  constructor(private readonly chargesService: ChargesService) {}
+  constructor(
+    private readonly chargesService: ChargesService,
+    private readonly agendados: DisparosAgendadosService,
+  ) {}
 
   @Post()
   create(@Body() dto: CreateChargeDto, @Req() req: any) {
@@ -29,6 +34,22 @@ export class ChargesController {
   @Post('dispatch')
   dispatch(@Body() dto: DispatchChargesDto) {
     return this.chargesService.dispatch(dto);
+  }
+
+  /** Agenda o disparo das cobranças selecionadas para uma data/hora. */
+  @Post('dispatch/agendar')
+  agendarDisparo(@Body() dto: AgendarDisparoDto, @Req() req: any) {
+    return this.agendados.agendar(dto, req.user?.userId);
+  }
+
+  @Get('dispatch/agendados')
+  listarAgendados() {
+    return this.agendados.listar();
+  }
+
+  @Delete('dispatch/agendados/:id')
+  cancelarAgendado(@Param('id') id: string) {
+    return this.agendados.cancelar(id);
   }
 
   @Get()

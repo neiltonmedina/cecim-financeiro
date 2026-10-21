@@ -4,11 +4,12 @@ import { ConversationsModule } from '../conversations/conversations.module';
 import { BoletosModule } from '../boletos/boletos.module';
 import { ChargesController } from './charges.controller';
 import { ChargesService } from './charges.service';
+import { DisparosAgendadosService } from './disparos-agendados.service';
 
 @Module({
   imports: [NotificationsModule, ConversationsModule, BoletosModule],
   controllers: [ChargesController],
-  providers: [ChargesService],
-  exports: [ChargesService],
+  providers: [ChargesService, DisparosAgendadosService],
+  exports: [ChargesService, DisparosAgendadosService],
 })
 export class ChargesModule {}

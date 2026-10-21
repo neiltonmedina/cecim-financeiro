@@ -316,3 +316,18 @@ model AppSetting {
   key   String @id
   value String
 }
+
+// Disparo de campanha marcado para uma data/hora (feito pelo painel; nada é agendado sozinho).
+model DisparoAgendado {
+  id           String    @id @default(uuid())
+  chargeIds    String[]
+  intervalDays Int
+  executarEm   DateTime
+  status       String    @default("AGENDADO") // AGENDADO, EXECUTANDO, EXECUTADO, CANCELADO, FALHOU
+  resultado    String?
+  criadoPor    String?
+  createdAt    DateTime  @default(now())
+  executadoEm  DateTime?
+
+  @@index([status, executarEm])
+}

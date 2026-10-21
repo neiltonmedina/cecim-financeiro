@@ -3,6 +3,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { timingSafeEqual } from 'crypto';
 import { SchedulerService } from '../scheduler/scheduler.service';
+import { DisparosAgendadosService } from '../charges/disparos-agendados.service';
 
 /**
  * Gatilho externo da rotina diária (marcar vencidas + avançar a régua).
@@ -20,12 +21,15 @@ export class CronController {
   constructor(
     private readonly config: ConfigService,
     private readonly scheduler: SchedulerService,
+    private readonly agendados: DisparosAgendadosService,
   ) {}
 
   /** Chamado a cada 10 min pelo cron-job.org: mantém o servidor acordado no plano grátis do Render. */
   @Get('ping')
-  ping() {
-    return { ok: true };
+  async ping() {
+    // No plano grátis o servidor pode ter dormido na hora marcada: o ping também dispara o que ficou pendente.
+    const disparos = await this.agendados.executarPendentes().catch(() => 0);
+    return { ok: true, disparos };
   }
 
   @Post('rotina-diaria')

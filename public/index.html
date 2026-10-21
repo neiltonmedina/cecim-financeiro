@@ -434,9 +434,11 @@
           <label style="font-size:13px; color:var(--muted);">Intervalo entre contatos (dias):</label>
           <input id="campaign-interval-PAINEL" type="number" min="1" step="1" value="5" style="width:70px;" />
           <button onclick="confirmarCampanha()">Confirmar e disparar</button>
+          <button class="secondary" onclick="abrirAgendamento()">🕒 Agendar disparo</button>
           <span style="font-size:12px; color:var(--muted);">O disparo só ocorre após você confirmar aqui - nada é enviado sozinho.</span>
         </div>
 
+        <div id="agendados-PAINEL"></div>
         <div id="charges-content-PAINEL" class="loading">Carregando...</div>
       </div>
     </div>
@@ -494,9 +496,11 @@
           <label style="font-size:13px; color:var(--muted);">Intervalo entre contatos (dias):</label>
           <input id="campaign-interval-INTER" type="number" min="1" step="1" value="5" style="width:70px;" />
           <button onclick="confirmarCampanha()">Confirmar e disparar</button>
+          <button class="secondary" onclick="abrirAgendamento()">🕒 Agendar disparo</button>
           <span style="font-size:12px; color:var(--muted);">O disparo só ocorre após você confirmar aqui - nada é enviado sozinho.</span>
         </div>
 
+        <div id="agendados-INTER"></div>
         <div id="charges-content-INTER" class="loading">Carregando...</div>
       </div>
     </div>
@@ -1666,6 +1670,7 @@ let abaAtual = 'dashboard';
 
 async function loadCharges(origem = chargesOrigem) {
   chargesOrigem = origem;
+  loadAgendados(origem);
   atualizarBadgeProblemas();
   if (abaAtual === 'problemas') loadProblemas();
   const el = document.getElementById('charges-content-' + origem);
@@ -2081,6 +2086,79 @@ async function confirmarCampanha() {
     loadCharges();
   } catch (e) {
     alert('Erro ao disparar campanha: ' + e.message);
+  }
+}
+
+// ---------- Disparo agendado ----------
+function abrirAgendamento() {
+  if (!selectedChargeIds.size) {
+    alert('Selecione ao menos uma cobrança antes de agendar.');
+    return;
+  }
+  const intervalDays = Number(document.getElementById('campaign-interval-' + chargesOrigem).value);
+  if (!intervalDays || intervalDays < 1) {
+    alert('Informe um número de dias válido para o intervalo entre contatos.');
+    return;
+  }
+  // Sugestão: amanhã às 9h.
+  const sugestao = new Date();
+  sugestao.setDate(sugestao.getDate() + 1);
+  sugestao.setHours(9, 0, 0, 0);
+  const local = new Date(sugestao.getTime() - sugestao.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  document.getElementById('modal').innerHTML = `
+    <h3 style="margin-bottom:4px;">🕒 Agendar disparo</h3>
+    <p style="color:var(--muted); font-size:13px; margin-top:0;">${selectedChargeIds.size} cobrança(s) selecionada(s) · intervalo de ${intervalDays} dia(s) entre os contatos</p>
+    <label style="font-size:13px; font-weight:600;">Data e hora do disparo</label>
+    <input id="agendar-quando" type="datetime-local" value="${local}" style="display:block; margin-top:6px;" />
+    <p style="font-size:12.5px; color:var(--muted);">Na hora marcada o sistema envia sozinho, com as mesmas travas do disparo manual. Quem pagar antes fica de fora. Você recebe uma notificação quando o disparo for feito.</p>
+    <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
+      <button class="secondary" onclick="closeModal()">Cancelar</button>
+      <button onclick="confirmarAgendamento(${intervalDays})">Agendar</button>
+    </div>`;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+async function confirmarAgendamento(intervalDays) {
+  const quando = document.getElementById('agendar-quando').value;
+  if (!quando) return alert('Escolha a data e a hora.');
+  const executarEm = new Date(quando);
+  try {
+    await api('/charges/dispatch/agendar', {
+      method: 'POST',
+      body: JSON.stringify({ chargeIds: Array.from(selectedChargeIds), intervalDays, executarEm: executarEm.toISOString() }),
+    });
+    closeModal();
+    alert(`Disparo agendado para ${executarEm.toLocaleString('pt-BR')} (${selectedChargeIds.size} cobrança(s)).`);
+    loadAgendados(chargesOrigem);
+  } catch (e) {
+    alert('Não foi possível agendar: ' + e.message);
+  }
+}
+
+async function loadAgendados(origem) {
+  const el = document.getElementById('agendados-' + origem);
+  if (!el) return;
+  const lista = await api('/charges/dispatch/agendados').catch(() => []);
+  if (!lista.length) { el.innerHTML = ''; return; }
+  const ROTULO = { AGENDADO: '🕒 Agendado', EXECUTANDO: '⏳ Enviando', EXECUTADO: '✓ Executado', CANCELADO: 'Cancelado', FALHOU: '⚠️ Falhou' };
+  el.innerHTML = `<div style="margin-bottom:14px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; font-size:13px;">
+    <strong>Disparos agendados</strong>
+    ${lista.map((d) => `<div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding-top:6px;">
+      <span>${ROTULO[d.status] || d.status}</span>
+      <span>${fmtDateTime(d.executarEm)}</span>
+      <span style="color:var(--muted);">${d.chargeIds.length} cobrança(s) · intervalo ${d.intervalDays} dia(s)${d.resultado ? ' · ' + escHtml(d.resultado) : ''}</span>
+      ${d.status === 'AGENDADO' ? `<button class="secondary" style="padding:4px 10px; font-size:12px;" onclick="cancelarAgendado('${d.id}')">Cancelar</button>` : ''}
+    </div>`).join('')}
+  </div>`;
+}
+
+async function cancelarAgendado(id) {
+  if (!confirm('Cancelar este disparo agendado? Nada será enviado.')) return;
+  try {
+    await api('/charges/dispatch/agendados/' + id, { method: 'DELETE' });
+    loadAgendados(chargesOrigem);
+  } catch (e) {
+    alert('Não foi possível cancelar: ' + e.message);
   }
 }
 
