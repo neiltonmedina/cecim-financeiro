@@ -38,6 +38,7 @@ model Client {
   document       String? // CPF/CNPJ
   email          String?
   phoneE164      String? // formato +5511999998888, usado para WhatsApp e SMS
+  telefonesExtras String[] @default([]) // outras pessoas da mesma empresa que também recebem as mensagens
   whatsappOptIn  Boolean  @default(true)
   smsOptIn       Boolean  @default(true)
   emailOptIn     Boolean  @default(true)

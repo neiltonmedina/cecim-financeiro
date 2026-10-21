@@ -7,6 +7,7 @@ import { EmailSmtpProvider } from '../notifications/providers/email-smtp.provide
 import { ClaudeAgentService, filtrarRespostaDoAgente } from './claude-agent.service';
 import { BoletosService } from '../boletos/boletos.service';
 import { PushService } from '../push/push.service';
+import { telefonesDoCliente } from '../clients/telefones.util';
 import { buildTemplateContext, formatCurrencyBRL, formatDateBR, parametrosDoModelo } from '../notifications/utils/template-renderer.util';
 
 function normalizePhone(raw: string): string {
@@ -128,7 +129,7 @@ export class ConversationsService {
       return;
     }
     const charge = await this.prisma.charge.findUnique({ where: { id: chargeId }, include: { client: true } });
-    if (!charge?.client.phoneE164) return;
+    if (!charge || !telefonesDoCliente(charge.client).length) return;
     const contexto = {
       ...buildTemplateContext(charge.client, charge, ''),
       // Referente ao vencimento original e ao valor que de fato foi pago.
@@ -137,12 +138,17 @@ export class ConversationsService {
     };
     const resumo = `[Pagamento confirmado - modelo ${modelo.providerTemplateName}] ${charge.client.name}: ${contexto.valor}`;
     try {
-      await this.whatsapp.send({
-        destination: charge.client.phoneE164,
-        body: resumo,
-        providerTemplateName: modelo.providerTemplateName,
-        templateParams: parametrosDoModelo(modelo.providerParams, contexto),
-      });
+      for (const destination of telefonesDoCliente(charge.client)) {
+        // Um telefone com problema não impede o agradecimento nos outros.
+        await this.whatsapp
+          .send({
+            destination,
+            body: resumo,
+            providerTemplateName: modelo.providerTemplateName,
+            templateParams: parametrosDoModelo(modelo.providerParams, contexto),
+          })
+          .catch((error: any) => this.logger.warn(`Falha ao enviar o agradecimento para ${destination}: ${error.message}`));
+      }
       const conv = await this.prisma.conversation.findFirst({ where: { chargeId }, orderBy: { createdAt: 'desc' } });
       if (conv) {
         await this.prisma.conversationMessage.create({
@@ -170,7 +176,10 @@ export class ConversationsService {
     const clientes = await this.prisma.client.findMany({
       where: {
         active: true,
-        ...(altPhone ? { phoneE164: { in: [phone, altPhone] } } : { phoneE164: phone }),
+        OR: [
+          { phoneE164: { in: altPhone ? [phone, altPhone] : [phone] } },
+          { telefonesExtras: { hasSome: altPhone ? [phone, altPhone] : [phone] } },
+        ],
       },
     });
     if (!clientes.length) {

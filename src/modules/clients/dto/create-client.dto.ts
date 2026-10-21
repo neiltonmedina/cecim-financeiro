@@ -1,4 +1,4 @@
-import { IsBoolean, IsEmail, IsOptional, IsString, Matches } from 'class-validator';
+import { IsArray, IsBoolean, IsEmail, IsOptional, IsString, Matches } from 'class-validator';
 
 export class CreateClientDto {
   @IsString()
@@ -17,6 +17,12 @@ export class CreateClientDto {
     message: 'phoneE164 deve estar no formato internacional, ex: +5511999998888',
   })
   phoneE164?: string;
+
+  // Outras pessoas da mesma empresa que também recebem as mensagens.
+  @IsOptional()
+  @IsArray()
+  @Matches(/^\+[1-9]\d{7,14}$/, { each: true, message: 'Cada telefone extra deve estar no formato +5511999998888' })
+  telefonesExtras?: string[];
 
   @IsOptional()
   @IsBoolean()

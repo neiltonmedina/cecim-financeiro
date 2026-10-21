@@ -112,3 +112,14 @@ describe('SchedulerService - modelo da régua (a vencer x vencido)', () => {
     );
   });
 });
+
+describe('SchedulerService - vários telefones da mesma empresa', () => {
+  it('manda o lembrete para o telefone principal e para os extras', async () => {
+    const conv = makeConversation({ client: { name: 'Empresa', phoneE164: '+5599999990000', telefonesExtras: ['+5599999991111'] } });
+    const { service, whatsapp } = setup([conv]);
+
+    await service.runDailyReminders();
+
+    expect(whatsapp.send.mock.calls.map((c: any) => c[0].destination)).toEqual(['+5599999990000', '+5599999991111']);
+  });
+});

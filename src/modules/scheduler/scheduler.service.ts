@@ -7,6 +7,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { WhatsAppProvider } from '../notifications/providers/whatsapp.provider';
 import { ConversationsService } from '../conversations/conversations.service';
+import { telefonesDoCliente } from '../clients/telefones.util';
 
 function startOfDay(date: Date): Date {
   const d = new Date(date);
@@ -88,7 +89,8 @@ export class SchedulerService {
       }
       // Se o cliente respondeu depois do último envio, não é "sem resposta" - ignora.
       if (conv.lastInboundAt && conv.lastInboundAt > (conv.lastOutboundAt ?? new Date(0))) continue;
-      if (!conv.client.phoneE164) continue;
+      const telefones = telefonesDoCliente(conv.client);
+      if (!telefones.length) continue;
       if (!conv.lastOutboundAt) continue;
 
       const staleThreshold = new Date(conv.lastOutboundAt.getTime() + conv.intervalDays * 24 * 60 * 60 * 1000);
@@ -124,13 +126,24 @@ export class SchedulerService {
         // Lembrete sempre via template aprovado: fora da janela de 24h desde a última
         // mensagem do cliente, o WhatsApp rejeita texto livre (erro 131047) - e um
         // lembrete de régua, por definição, vai pra quem não respondeu.
-        await this.whatsapp.send({
-          destination: conv.client.phoneE164,
-          body: resumo,
-          providerTemplateName: nomeModelo,
-          templateParams: params,
-          templateButtonPayloads: modelo?.providerBotoes?.length ? payloadsDosBotoes(modelo.providerBotoes, conv.chargeId!) : undefined,
-        });
+        // Todos os telefones da empresa; basta um receber para a régua avançar.
+        let enviados = 0;
+        let ultimoErro: any;
+        for (const destination of telefones) {
+          try {
+            await this.whatsapp.send({
+              destination,
+              body: resumo,
+              providerTemplateName: nomeModelo,
+              templateParams: params,
+              templateButtonPayloads: modelo?.providerBotoes?.length ? payloadsDosBotoes(modelo.providerBotoes, conv.chargeId!) : undefined,
+            });
+            enviados++;
+          } catch (error) {
+            ultimoErro = error;
+          }
+        }
+        if (!enviados) throw ultimoErro;
         await this.prisma.conversationMessage.create({
           data: { conversationId: conv.id, direction: 'OUTBOUND', channel: 'WHATSAPP', content: resumo },
         });

@@ -280,3 +280,18 @@ describe('ConversationsService.registrarPagamento - agradecimento', () => {
     expect(whatsapp.send).not.toHaveBeenCalled();
   });
 });
+
+describe('ConversationsService - resposta de telefone extra da empresa', () => {
+  it('procura o cliente também pelos telefones extras', async () => {
+    const prisma: any = {
+      processedWhatsAppMessage: { create: jest.fn().mockResolvedValue({}) },
+      client: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const service = new ConversationsService(prisma, {} as any, {} as any, {} as any, {} as any, {} as any, {} as any);
+
+    await service.handleInboundWhatsApp('5599999991111', 'oi', 'wamid.extra');
+
+    const where = prisma.client.findMany.mock.calls[0][0].where;
+    expect(where.OR).toContainEqual({ telefonesExtras: { hasSome: expect.arrayContaining(['+5599999991111']) } });
+  });
+});

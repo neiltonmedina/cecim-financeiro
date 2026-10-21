@@ -73,6 +73,7 @@ export class NotificationsProcessor extends WorkerHost {
         id: { not: log.id },
         chargeId: log.chargeId,
         channel: log.channel,
+        destination: log.destination, // outro telefone da mesma empresa não é duplicata
         status: { in: ['SENT', 'DELIVERED', 'READ'] },
         sentAt: { gte: new Date(log.queuedAt.getTime() - 10 * 60 * 1000) },
       },

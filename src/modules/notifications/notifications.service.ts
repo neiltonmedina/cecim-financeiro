@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { telefonesDoCliente } from '../clients/telefones.util';
 import { Cron } from '@nestjs/schedule';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -89,8 +90,8 @@ export class NotificationsService {
   resolveChannelsForClient(client: Client, requested?: Channel[]): Channel[] {
     const candidates = requested?.length ? requested : ([Channel.WHATSAPP, Channel.EMAIL] as Channel[]);
     return candidates.filter((channel) => {
-      if (channel === Channel.WHATSAPP) return client.whatsappOptIn && !!client.phoneE164;
-      if (channel === Channel.SMS) return client.smsOptIn && !!client.phoneE164;
+      if (channel === Channel.WHATSAPP) return client.whatsappOptIn && telefonesDoCliente(client).length > 0;
+      if (channel === Channel.SMS) return client.smsOptIn && telefonesDoCliente(client).length > 0;
       if (channel === Channel.EMAIL) return client.emailOptIn && !!client.email;
       return false;
     });
@@ -150,8 +151,9 @@ export class NotificationsService {
 
       const queued: Channel[] = [];
       for (const channel of channels) {
-        const destination = channel === Channel.EMAIL ? charge.client.email! : charge.client.phoneE164!;
-
+        // WhatsApp/SMS vão para todos os telefones da empresa (principal + extras).
+        const destinos = channel === Channel.EMAIL ? [charge.client.email!] : telefonesDoCliente(charge.client);
+        for (const destination of destinos) {
         const log = await this.prisma.notificationLog.create({
           data: {
             chargeId: charge.id,
@@ -167,6 +169,7 @@ export class NotificationsService {
         });
 
         await this.enfileirarOuEnviar(log.id);
+        }
         queued.push(channel);
       }
 

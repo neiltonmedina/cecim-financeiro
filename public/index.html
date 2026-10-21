@@ -371,7 +371,11 @@
         <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:10px;">
           <input id="client-name" placeholder="Nome completo" />
           <input id="client-document" placeholder="CPF/CNPJ (só números)" onblur="buscarCnpj()" />
-          <input id="client-phone" placeholder="Telefone +5599999999999" />
+          <div style="display:flex; gap:6px;">
+            <input id="client-phone" placeholder="Telefone +5599999999999" style="flex:1; min-width:0;" />
+            <button type="button" class="secondary" title="Adicionar outro telefone da mesma empresa" onclick="adicionarTelefoneExtra()" style="padding:0 14px; font-size:18px; font-weight:700;">+</button>
+          </div>
+          <div id="client-telefones-extras" style="display:contents;"></div>
           <input id="client-email" placeholder="E-mail (opcional)" />
           <input id="client-cep" placeholder="CEP" />
           <input id="client-endereco" placeholder="Rua" />
@@ -789,7 +793,7 @@ async function loadClients() {
       html += `<tr>
         <td>${c.name}</td>
         <td>${c.document ?? '-'}</td>
-        <td>${c.phoneE164 ?? '-'}</td>
+        <td>${c.phoneE164 ?? '-'}${(c.telefonesExtras || []).length ? ` <span class="pill" title="${c.telefonesExtras.join(', ')}">+${c.telefonesExtras.length}</span>` : ''}</td>
         <td>${cidadeUf}</td>
         <td><button class="secondary" onclick="editarCliente('${c.id}')">Editar</button></td>
       </tr>`;
@@ -805,11 +809,32 @@ let clientsCache = {};
 let editingClientId = null;
 const CLIENT_FIELDS = { name: 'name', document: 'document', phone: 'phoneE164', email: 'email', cep: 'cep', endereco: 'endereco', numero: 'numero', bairro: 'bairro', cidade: 'cidade', uf: 'uf' };
 
+// Outros telefones da mesma empresa: todos recebem as mensagens.
+function adicionarTelefoneExtra(valor = '') {
+  const box = document.createElement('div');
+  box.className = 'telefone-extra';
+  box.style.cssText = 'display:flex; gap:6px;';
+  box.innerHTML = `<input class="client-tel-extra" placeholder="Outro telefone (com DDD)" style="flex:1; min-width:0;" />
+    <button type="button" class="secondary" title="Remover este telefone" onclick="this.parentElement.remove()" style="padding:0 14px; font-size:18px;">×</button>`;
+  box.querySelector('input').value = valor;
+  document.getElementById('client-telefones-extras').appendChild(box);
+  if (!valor) box.querySelector('input').focus();
+}
+
+function telefonesExtrasDoForm() {
+  return [...document.querySelectorAll('.client-tel-extra')]
+    .map((el) => el.value.trim())
+    .filter(Boolean)
+    .map((t) => (t.startsWith('+') ? '+' + onlyDigitsStr(t) : normalizePhone(t)));
+}
+
 async function editarCliente(id) {
   const c = clientsCache[id] ?? (await api('/clients/' + id).catch(() => null));
   if (!c) return;
   editingClientId = id;
   Object.entries(CLIENT_FIELDS).forEach(([f, k]) => (document.getElementById('client-' + f).value = c[k] ?? ''));
+  document.getElementById('client-telefones-extras').innerHTML = '';
+  (c.telefonesExtras || []).forEach((t) => adicionarTelefoneExtra(t));
   document.getElementById('client-form-title').textContent = 'Editar cliente';
   document.getElementById('client-submit').textContent = 'Salvar alterações';
   document.getElementById('client-cancel-edit').style.display = '';
@@ -824,6 +849,7 @@ function cancelarEdicaoCliente() {
   ultimoCnpjConsultado = '';
   document.getElementById('cnpj-msg').textContent = '';
   Object.keys(CLIENT_FIELDS).forEach((f) => (document.getElementById('client-' + f).value = ''));
+  document.getElementById('client-telefones-extras').innerHTML = '';
   document.getElementById('client-form-title').textContent = 'Novo cliente';
   document.getElementById('client-submit').textContent = 'Cadastrar cliente';
   document.getElementById('client-cancel-edit').style.display = 'none';
@@ -909,6 +935,7 @@ async function createClient() {
     name,
     document: document.getElementById('client-document').value.trim() || undefined,
     phoneE164: phoneE164 || undefined,
+    telefonesExtras: telefonesExtrasDoForm(),
     email: document.getElementById('client-email').value.trim() || undefined,
     cep: document.getElementById('client-cep').value.trim() || undefined,
     endereco: document.getElementById('client-endereco').value.trim() || undefined,
