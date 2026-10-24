@@ -37,7 +37,7 @@ export class ConversationsController {
         client: true,
         // Situação dos envios da cobrança - mostra no painel por que uma conversa
         // ainda não tem mensagem (na fila, falhou e o motivo, etc.).
-        charge: { omit: { boletoPdfBase64: true }, include: { notifications: { where: { channel: 'WHATSAPP' }, orderBy: { queuedAt: 'desc' }, take: 5 } } },
+        charge: { omit: { boletoPdfBase64: true }, include: { notifications: { where: { channel: 'WHATSAPP' }, orderBy: { queuedAt: 'desc' }, take: 30 } } },
         messages: { orderBy: { createdAt: 'asc' } },
         agreements: true,
       },

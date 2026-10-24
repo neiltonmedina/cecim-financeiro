@@ -134,3 +134,19 @@ describe('SchedulerService - não manda duas mensagens no mesmo dia', () => {
     expect(whatsapp.send).not.toHaveBeenCalled();
   });
 });
+
+describe('SchedulerService - status de entrega por número', () => {
+  it('registra o envio da régua de cada telefone para o webhook da Meta atualizar entregue/lida', async () => {
+    const conv = makeConversation({ chargeId: 'charge-1', client: { name: 'Empresa', phoneE164: '+5599999990000', telefonesExtras: ['+5599999991111'] } });
+    const { service, prisma, whatsapp } = setup([conv]);
+    prisma.notificationLog.create = jest.fn();
+    whatsapp.send.mockResolvedValueOnce({ providerMessageId: 'wamid.A' }).mockResolvedValueOnce({ providerMessageId: 'wamid.B' });
+
+    await service.runDailyReminders();
+
+    expect(prisma.notificationLog.create.mock.calls.map((c: any) => [c[0].data.destination, c[0].data.providerMessageId, c[0].data.status])).toEqual([
+      ['+5599999990000', 'wamid.A', 'SENT'],
+      ['+5599999991111', 'wamid.B', 'SENT'],
+    ]);
+  });
+});

@@ -129,7 +129,7 @@ export class SchedulerService {
       const params = modelo?.providerParams?.length
         ? parametrosDoModelo(modelo.providerParams, buildTemplateContext(conv.client, conv.charge as any, ''))
         : [conv.client.name, codigo];
-      const resumo = `[Lembrete automático - modelo ${nomeModelo}] ${conv.client.name}: ${codigo}`;
+      const resumo = `[Lembrete automático - modelo ${nomeModelo}] ${conv.client.name}`;
 
       try {
         // Lembrete sempre via template aprovado: fora da janela de 24h desde a última
@@ -140,7 +140,7 @@ export class SchedulerService {
         let ultimoErro: any;
         for (const destination of telefones) {
           try {
-            await this.whatsapp.send({
+            const resultado = await this.whatsapp.send({
               destination,
               body: resumo,
               providerTemplateName: nomeModelo,
@@ -148,6 +148,20 @@ export class SchedulerService {
               templateButtonPayloads: modelo?.providerBotoes?.length ? payloadsDosBotoes(modelo.providerBotoes, conv.chargeId!) : undefined,
             });
             enviados++;
+            // Registra o envio deste número: é o que permite o webhook da Meta marcar entregue/lida.
+            await this.prisma.notificationLog
+              .create({
+                data: {
+                  chargeId: conv.chargeId!,
+                  channel: 'WHATSAPP',
+                  destination,
+                  templateType: noPrazo && modelo?.type === 'BOLETO_DISPONIVEL' ? 'BOLETO_DISPONIVEL' : 'COBRANCA_PENDENTE',
+                  status: 'SENT',
+                  providerMessageId: resultado?.providerMessageId,
+                  sentAt: new Date(),
+                },
+              })
+              .catch((e: any) => this.logger.warn(`Envio da régua para ${destination} não registrado: ${e.message}`));
           } catch (error) {
             ultimoErro = error;
           }

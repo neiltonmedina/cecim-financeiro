@@ -2148,7 +2148,7 @@ async function loadCharges(origem = chargesOrigem) {
     html += '</tbody></table>';
     el.innerHTML = html;
     ultimosEnvios = Object.fromEntries(charges.map((c) => [c.id, {
-      cliente: c.client?.name, envio: c.notifications?.[0], clientId: c.clientId,
+      cliente: c.client?.name, envio: c.notifications?.[0], notificacoes: c.notifications, clientId: c.clientId,
       telefone: c.client?.phoneE164, temBoleto: !!(c.linhaDigitavel || c.pixCopiaECola),
     }]));
   } catch (e) {
@@ -2363,7 +2363,7 @@ function renderProblemas() {
     return;
   }
   for (const c of lista) {
-    ultimosEnvios[c.id] = { cliente: c.client?.name, envio: c.notifications?.[0], clientId: c.clientId, telefone: c.client?.phoneE164, temBoleto: !!(c.linhaDigitavel || c.pixCopiaECola) };
+    ultimosEnvios[c.id] = { cliente: c.client?.name, envio: c.notifications?.[0], notificacoes: c.notifications, clientId: c.clientId, telefone: c.client?.phoneE164, temBoleto: !!(c.linhaDigitavel || c.pixCopiaECola) };
   }
   let html = '<table><thead><tr><th>Cliente</th><th>Origem</th><th>Valor</th><th>Vencimento</th><th>Problema</th><th>Resolver</th></tr></thead><tbody>';
   for (const c of lista) {
@@ -2437,6 +2437,35 @@ function explicarErroEnvio(msg, temBoleto = false) {
   return 'Erro não identificado - veja o detalhe técnico abaixo e, se continuar, avise o suporte do sistema.';
 }
 
+/** Situação de cada número que recebeu a cobrança: o último envio de cada telefone. */
+function entregaPorNumero(notifs) {
+  const porNumero = new Map();
+  for (const n of notifs || []) if (!porNumero.has(n.destination)) porNumero.set(n.destination, n); // já vem do mais novo
+  if (!porNumero.size) return '';
+  const ROTULO = {
+    READ: ['✓✓', '#2b8ae6', 'Lida', (n) => n.readAt],
+    DELIVERED: ['✓✓', 'var(--muted)', 'Entregue (ainda não lida)', (n) => n.deliveredAt],
+    SENT: ['✓', 'var(--muted)', 'Enviada, ainda não entregue', (n) => n.sentAt],
+    SENDING: ['⏳', 'var(--yellow)', 'Enviando', (n) => n.queuedAt],
+    QUEUED: ['⏳', 'var(--yellow)', 'Na fila de envio', (n) => n.queuedAt],
+    FAILED: ['⚠️', 'var(--red)', 'Não enviada', (n) => n.failedAt || n.queuedAt],
+  };
+  return `<div style="margin:10px 0; padding:10px 12px; border-radius:10px; background:#f6f7fb; font-size:13px;">
+    <strong>Entrega por número</strong>
+    ${[...porNumero.values()].map((n) => {
+      const [ico, cor, rotulo, quando] = ROTULO[n.status] || ['•', 'var(--muted)', n.status, (x) => x.queuedAt];
+      return `<div style="display:flex; gap:8px; align-items:baseline; flex-wrap:wrap; margin-top:6px;">
+        <span style="font-weight:800; color:${cor}; letter-spacing:-2px; min-width:22px;">${ico}</span>
+        <span style="font-variant-numeric:tabular-nums;">${escHtml(n.destination)}</span>
+        <span style="color:${cor}; font-weight:600;">${rotulo}</span>
+        <span style="color:var(--muted); font-size:12px;">${fmtDateTime(quando(n))}</span>
+        ${n.status === 'FAILED' && n.errorMessage ? `<span style="color:var(--red); font-size:12px; width:100%; padding-left:30px;">${escHtml(explicarErroEnvio(n.errorMessage, true))}</span>` : ''}
+      </div>`;
+    }).join('')}
+    <div style="color:var(--muted); font-size:11.5px; margin-top:8px;">✓ enviada · ✓✓ cinza entregue no celular · ✓✓ azul lida (só aparece se o cliente abrir a conversa e tiver a confirmação de leitura ligada no WhatsApp).</div>
+  </div>`;
+}
+
 /** Ícone ao lado do status com a situação do último envio de WhatsApp (clicável). */
 function iconeEnvio(c) {
   const n = c.notifications?.[0];
@@ -2453,7 +2482,18 @@ function iconeEnvio(c) {
     : enviada ? ['✓', 'var(--muted)', 'Enviada em ' + fmtDateTime(enviada.sentAt) + ' (ainda não entregue)']
     : [null];
   if (!ico) return '';
-  return `<button style="${estilo} font-size:13px; font-weight:700; color:${cor}; letter-spacing:-2px;" title="${texto}" onclick="alert('${texto}')">${ico}</button>`;
+  return `<button style="${estilo} font-size:13px; font-weight:700; color:${cor}; letter-spacing:-2px;" title="${texto} - clique para ver cada número" onclick="mostrarEntrega('${c.id}')">${ico}</button>`;
+}
+
+/** Entrega separada por número (clique no ✓ / ✓✓ da lista). */
+function mostrarEntrega(chargeId) {
+  const { cliente, notificacoes } = ultimosEnvios[chargeId] ?? {};
+  document.getElementById('modal').innerHTML = `
+    <h3 style="margin-bottom:4px;">Entrega da cobrança</h3>
+    <p style="color:var(--muted); font-size:13px; margin-top:0;">${escHtml(cliente ?? '')}</p>
+    ${entregaPorNumero(notificacoes) || '<div class="empty">Nenhum envio registrado.</div>'}
+    <div style="display:flex; justify-content:flex-end; margin-top:14px;"><button class="secondary" onclick="closeModal()">Fechar</button></div>`;
+  document.getElementById('modal-overlay').classList.add('open');
 }
 
 function mostrarErroEnvio(chargeId) {
@@ -2631,6 +2671,7 @@ async function openConversation(id) {
         ${conv.paused ? ' <span class="human-flag">⏸ pausada manualmente</span>' : ''}
       </p><hr/>`;
     const envios = conv.charge?.notifications ?? [];
+    html += entregaPorNumero(envios);
     if (!conv.messages.length) {
       const ultimo = envios[0];
       const SITUACAO = {
