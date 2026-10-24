@@ -2442,6 +2442,15 @@ function entregaPorNumero(notifs) {
   const porNumero = new Map();
   for (const n of notifs || []) if (!porNumero.has(n.destination)) porNumero.set(n.destination, n); // já vem do mais novo
   if (!porNumero.size) return '';
+  // Histórico de cada número: última vez que leu e última mensagem que chegou (✓✓ entregue, ou ✓ só enviada).
+  const maisNovo = (lista, campo) => lista.map((n) => n[campo]).filter(Boolean).sort().pop();
+  const historico = (destino) => {
+    const logs = (notifs || []).filter((n) => n.destination === destino);
+    const lida = maisNovo(logs, 'readAt');
+    const entregue = maisNovo(logs, 'deliveredAt') || lida; // lida implica entregue
+    const enviada = maisNovo(logs, 'sentAt');
+    return { lida, recebida: entregue || enviada, recebidaTraco: entregue ? '✓✓' : '✓' };
+  };
   const ROTULO = {
     READ: ['✓✓', '#2b8ae6', 'Lida', (n) => n.readAt],
     DELIVERED: ['✓✓', 'var(--muted)', 'Entregue (ainda não lida)', (n) => n.deliveredAt],
@@ -2459,6 +2468,13 @@ function entregaPorNumero(notifs) {
         <span style="font-variant-numeric:tabular-nums;">${escHtml(n.destination)}</span>
         <span style="color:${cor}; font-weight:600;">${rotulo}</span>
         <span style="color:var(--muted); font-size:12px;">${fmtDateTime(quando(n))}</span>
+        ${(() => {
+          const h = historico(n.destination);
+          return `<div style="width:100%; padding-left:30px; font-size:12.5px; color:var(--muted); line-height:1.6;">
+            <div>Última leitura: <strong style="color:${h.lida ? '#2b8ae6' : 'var(--muted)'};">${h.lida ? '✓✓ ' + fmtDateTime(h.lida) : 'ainda não leu'}</strong></div>
+            <div>Última mensagem recebida: <strong style="color:var(--text);">${h.recebida ? h.recebidaTraco + ' ' + fmtDateTime(h.recebida) : 'nenhuma ainda'}</strong></div>
+          </div>`;
+        })()}
         ${n.status === 'FAILED' && n.errorMessage ? `<span style="color:var(--red); font-size:12px; width:100%; padding-left:30px;">${escHtml(explicarErroEnvio(n.errorMessage, true))}</span>` : ''}
       </div>`;
     }).join('')}
