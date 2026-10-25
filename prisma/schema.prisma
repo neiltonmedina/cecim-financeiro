@@ -363,16 +363,3 @@ model LoteMensal {
 
   charges Charge[]
 }
-
-// Tudo o que chega no WhatsApp da CECIM (inclusive de números não cadastrados e
-// mensagens que não são texto), para conferir no painel sem precisar do chip.
-model MensagemRecebida {
-  id         String   @id // id da mensagem na Meta (wamid...)
-  de         String // telefone de quem enviou, só dígitos
-  nomePerfil String? // nome que a pessoa usa no WhatsApp
-  tipo       String // text, button, image, audio, document...
-  texto      String?
-  createdAt  DateTime @default(now())
-
-  @@index([createdAt])
-}

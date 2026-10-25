@@ -184,7 +184,6 @@ export class ConversationsService {
     });
     if (!clientes.length) {
       this.logger.warn(`Mensagem recebida de número não cadastrado: ${phone}`);
-      await this.push.notificar('💬 Mensagem de número não cadastrado', `${phone}: "${String(text).slice(0, 100)}"`, 'conversations');
       return;
     }
     // Mesmo WhatsApp para mais de uma empresa (mesmo dono): a resposta vale para a

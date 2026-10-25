@@ -287,7 +287,7 @@ describe('ConversationsService - resposta de telefone extra da empresa', () => {
       processedWhatsAppMessage: { create: jest.fn().mockResolvedValue({}) },
       client: { findMany: jest.fn().mockResolvedValue([]) },
     };
-    const service = new ConversationsService(prisma, {} as any, {} as any, {} as any, {} as any, {} as any, { notificar: jest.fn() } as any);
+    const service = new ConversationsService(prisma, {} as any, {} as any, {} as any, {} as any, {} as any, {} as any);
 
     await service.handleInboundWhatsApp('5599999991111', 'oi', 'wamid.extra');
 

@@ -69,30 +69,3 @@ describe('WebhooksController - assinatura da Meta', () => {
     expect(() => controller.receiveWhatsAppEvent(JSON.parse(corpo), req())).not.toThrow();
   });
 });
-
-describe('WebhooksController - caixa de entrada do WhatsApp', () => {
-  const { resumoDaMensagem } = require('./webhooks.controller');
-
-  it('resume texto, botão e mídia', () => {
-    expect(resumoDaMensagem({ type: 'text', text: { body: 'oi' } })).toEqual({ tipo: 'text', texto: 'oi' });
-    expect(resumoDaMensagem({ type: 'button', button: { text: 'Pix', payload: 'PIX:1' } })).toEqual({ tipo: 'button', texto: 'Pix' });
-    expect(resumoDaMensagem({ type: 'image', image: { caption: 'comprovante' } })).toEqual({ tipo: 'image', texto: '[imagem] comprovante' });
-    expect(resumoDaMensagem({ type: 'audio', audio: {} })).toEqual({ tipo: 'audio', texto: '[áudio]' });
-  });
-
-  it('guarda a mensagem de qualquer número, mesmo não cadastrado e mesmo sem ser texto', () => {
-    const createMany = jest.fn().mockResolvedValue({});
-    const prisma: any = { mensagemRecebida: { createMany } };
-    const controller = new WebhooksController(prisma, { get: () => '' } as any, { handleInboundWhatsApp: jest.fn() } as any, {} as any);
-    controller.receiveWhatsAppEvent({
-      entry: [{ changes: [{ value: {
-        contacts: [{ wa_id: '5594988887777', profile: { name: 'Fulano' } }],
-        messages: [{ id: 'wamid.X', from: '5594988887777', type: 'image', image: { caption: 'boleto' } }],
-      } }] }],
-    });
-    expect(createMany).toHaveBeenCalledWith({
-      data: [{ id: 'wamid.X', de: '5594988887777', nomePerfil: 'Fulano', tipo: 'image', texto: '[imagem] boleto' }],
-      skipDuplicates: true,
-    });
-  });
-});
