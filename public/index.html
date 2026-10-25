@@ -574,6 +574,13 @@
 
     <div id="tab-conversations" class="tab" style="display:none;">
       <div class="card">
+        <div class="card-head"><div><h3>Caixa de entrada do WhatsApp</h3>
+          <div class="hint">Tudo o que chega no WhatsApp da CECIM, inclusive de números não cadastrados, fotos, áudios e documentos. Serve para ver o que chega sem precisar do chip (a conta funciona pela API, não por um celular).
+          Só aparece o que chegou <strong>depois</strong> de esta tela entrar no ar; o WhatsApp não guarda histórico para a API. Fotos e áudios aparecem só como aviso, não o arquivo.</div></div>
+          <button class="secondary" onclick="loadCaixaEntrada()">Atualizar</button></div>
+        <div id="caixa-entrada" class="loading">Carregando...</div>
+      </div>
+      <div class="card">
         <div class="filters">
           <select id="conv-human-filter" onchange="loadConversations()">
             <option value="">Todas as conversas</option>
@@ -1045,6 +1052,27 @@ async function alternarEnvioLote(id, ligar) {
   }
 }
 
+// ---------- Caixa de entrada do WhatsApp ----------
+async function loadCaixaEntrada() {
+  const el = document.getElementById('caixa-entrada');
+  try {
+    const itens = await api('/caixa-entrada');
+    el.className = '';
+    el.innerHTML = !itens.length
+      ? '<div class="empty">Nenhuma mensagem recebida ainda. Peça para alguém mandar um "oi" para o WhatsApp da CECIM: em alguns segundos ela aparece aqui.</div>'
+      : '<div style="max-height:360px; overflow:auto;"><table><thead><tr><th>Quando</th><th>De</th><th>Tipo</th><th>Mensagem</th></tr></thead><tbody>' +
+        itens.map((m) => `<tr>
+          <td style="white-space:nowrap;">${fmtDateTime(m.createdAt)}</td>
+          <td>${m.cliente ? '<strong>' + escHtml(m.cliente) + '</strong>' : '<span class="pill" style="background:#fdf3e0; color:#8a5a12;">não cadastrado</span>'}
+            <div style="font-size:12px; color:var(--muted); font-variant-numeric:tabular-nums;">+${escHtml(m.de)}${m.nomePerfil ? ' · ' + escHtml(m.nomePerfil) : ''}</div></td>
+          <td>${escHtml(m.tipo)}</td>
+          <td style="max-width:420px; white-space:pre-wrap; word-break:break-word;">${escHtml(m.texto || '')}</td></tr>`).join('') +
+        '</tbody></table></div>';
+  } catch (e) {
+    el.innerHTML = '<div class="empty">' + escHtml(e.message) + '</div>';
+  }
+}
+
 // ---------- Equipe (usuários) e registro de ações ----------
 let usuariosCache = [];
 
@@ -1290,7 +1318,7 @@ function switchTab(name) {
   if (name === 'charges') loadCharges('PAINEL');
   if (name === 'mensal') { prepararMensal(); loadCharges('MENSAL'); loadLotes(); }
   if (name === 'inter') { prepararFiltroInter(); loadCharges('INTER'); verificarAvisoInter(); }
-  if (name === 'conversations') loadConversations();
+  if (name === 'conversations') { loadConversations(); loadCaixaEntrada(); }
   if (name === 'messages') loadTemplates();
   if (name === 'equipe') { loadUsuarios(); loadRegistro(); }
   if (name === 'report') loadOfertas();

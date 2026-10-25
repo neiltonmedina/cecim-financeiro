@@ -7,6 +7,23 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { ConversationsService } from '../conversations/conversations.service';
 import { BoletosService } from '../boletos/boletos.service';
 
+const ROTULO_TIPO: Record<string, string> = {
+  image: 'imagem', audio: 'áudio', video: 'vídeo', document: 'documento', sticker: 'figurinha',
+  location: 'localização', contacts: 'contato', reaction: 'reação', order: 'pedido', unsupported: 'não suportada',
+};
+
+/** Texto legível de qualquer mensagem recebida (para a caixa de entrada do painel). */
+export function resumoDaMensagem(message: any): { tipo: string; texto: string } {
+  const tipo = String(message?.type ?? 'text');
+  const texto =
+    message?.text?.body ?? message?.button?.text ?? message?.interactive?.button_reply?.title ?? message?.interactive?.list_reply?.title;
+  if (texto) return { tipo, texto };
+  const midia = message?.[tipo];
+  const legenda = midia?.caption ?? midia?.filename ?? (tipo === 'reaction' ? midia?.emoji : undefined);
+  const rotulo = ROTULO_TIPO[tipo] ?? tipo;
+  return { tipo, texto: legenda ? `[${rotulo}] ${legenda}` : `[${rotulo}]` };
+}
+
 /** Mapeia os status de entrega da Meta para o enum interno de NotificationLog. */
 const WHATSAPP_STATUS_MAP: Record<string, 'SENT' | 'DELIVERED' | 'READ' | 'FAILED'> = {
   sent: 'SENT',
@@ -73,7 +90,18 @@ export class WebhooksController {
         }
 
         const messages = change.value?.messages ?? [];
+        const nomes = new Map<string, string>((change.value?.contacts ?? []).map((c: any) => [String(c.wa_id), c.profile?.name]));
         for (const message of messages) {
+          // Caixa de entrada: guarda tudo o que chega (inclusive número não cadastrado e mídia).
+          if (message.id && message.from) {
+            const { tipo, texto } = resumoDaMensagem(message);
+            this.prisma.mensagemRecebida
+              .createMany({
+                data: [{ id: message.id, de: String(message.from), nomePerfil: nomes.get(String(message.from)) ?? null, tipo, texto: texto.slice(0, 2000) }],
+                skipDuplicates: true,
+              })
+              .catch((err) => this.logger.warn(`Mensagem recebida não gravada na caixa de entrada: ${err.message}`));
+          }
           // Texto digitado, toque em botão de resposta rápida de template (type "button")
           // ou de mensagem interativa (type "interactive").
           const text = message.text?.body ?? message.button?.text ?? message.interactive?.button_reply?.title;
