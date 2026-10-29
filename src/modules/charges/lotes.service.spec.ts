@@ -43,7 +43,7 @@ describe('LotesService.gerarLinha - sem boleto duplicado', () => {
     const { service, prisma, boletos } = setup(null);
     expect(await service.gerarLinha('L1', ELIO)).toMatchObject({ status: 'OK' });
     expect(prisma.charge.create.mock.calls[0][0].data).toMatchObject({
-      clientId: 'cli', amountCents: 69000, origem: 'MENSAL', seuNumero: 'BOL-002', diasAgenda: 30, loteId: 'L1', description: 'Mensalidade 11/2099',
+      clientId: 'cli', amountCents: 69000, origem: 'MENSAL', seuNumero: 'BOL-002', diasAgenda: 30, loteId: 'L1', description: 'Honorários 11/2099',
     });
     expect(boletos.gerarBoletoParaCobranca).toHaveBeenCalled();
   });

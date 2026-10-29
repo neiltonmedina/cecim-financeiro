@@ -413,7 +413,7 @@
           <div class="hint">Use só para quem <strong>ainda não tem boleto</strong>. Vencimento hoje ou futuro (o Inter não aceita data passada). Quem já tem boleto: aba <strong>Boletos do Inter</strong>.</div></div></div>
         <div class="filters">
           <select id="test-charge-client" style="min-width:220px;"></select>
-          <input id="test-charge-desc" type="text" placeholder="Descrição" value="Mensalidade" style="max-width:160px;" />
+          <input id="test-charge-desc" type="text" placeholder="Descrição" value="Honorários" style="max-width:160px;" />
           <input id="test-charge-amount" type="text" placeholder="Valor (ex: 5,00)" value="5,00" style="max-width:120px;" />
           <input id="test-charge-duedate" type="date" />
           <button onclick="createTestCharge()">Criar cobrança</button>
@@ -1529,7 +1529,7 @@ const CAMPOS_MODELO = [
   ['valor', 'valor', 'R$ 690,00'],
   ['linha digitável', 'linhaDigitavel', '07790001161206142039908713267545515860000069000'],
   ['dias de atraso', 'diasAtraso', '5'],
-  ['descrição', 'descricao', 'Mensalidade 10/2026'],
+  ['descrição', 'descricao', 'Honorários 10/2026'],
 ];
 // Modelos antigos usam {{vencimento}} (data da cobrança) - no editor vira o mesmo [vencimento].
 const paraEditor = (t) => CAMPOS_MODELO.reduce((txt, [rot, chave]) => txt.replaceAll(`{{${chave}}}`, `[${rot}]`), String(t || '').replaceAll('{{vencimento}}', '{{vencimentoBoleto}}'));
@@ -1552,10 +1552,10 @@ let modelosCache = {};
 // Textos sugeridos para a versão com botões (sem a linha digitável - o código vai
 // sozinho, copiável, quando o cliente toca em Pix ou Boleto).
 const SUGESTAO_COM_BOTOES = {
-  BOLETO_DISPONIVEL: 'Olá, [nome]! 😊\n\nSeu boleto da *CECIM Assessoria Contábil* já está disponível.\n\n📅 Vencimento: *[vencimento]*\n💰 Valor: *[valor]*\n\nEscolha abaixo a forma de pagamento:',
-  LEMBRETE_VENCIMENTO: 'Olá, [nome]! 😊\n\nPassando para lembrar que o boleto da *CECIM Assessoria Contábil* vence hoje, *[vencimento]*.\n\n💰 Valor: *[valor]*\n\nEscolha abaixo a forma de pagamento:',
+  BOLETO_DISPONIVEL: 'Olá, [nome]! 😊\n\nSeu boleto de honorários da *CECIM Assessoria Contábil* já está disponível.\n\n📅 Vencimento: *[vencimento]*\n💰 Valor: *[valor]*\n\nEscolha abaixo a forma de pagamento:',
+  LEMBRETE_VENCIMENTO: 'Olá, [nome]! 😊\n\nPassando para lembrar que o boleto de honorários da *CECIM Assessoria Contábil* vence hoje, *[vencimento]*.\n\n💰 Valor: *[valor]*\n\nEscolha abaixo a forma de pagamento:',
   CONFIRMACAO_PAGAMENTO: 'Olá, [nome]! 😊\n\nConfirmamos o recebimento do pagamento da *CECIM Assessoria Contábil* referente ao vencimento de *[vencimento]*, no valor de *[valor]*.\n\nAgradecemos pela confiança e pela pontualidade!',
-  COBRANCA_PENDENTE: 'Olá, [nome], como vai?\n\nNotamos que a mensalidade da *CECIM Assessoria Contábil* se encontra em aberto. Sabemos como a correria do dia a dia é intensa, por isso facilitamos para você:\n\n📌 Vencimento: *[vencimento]*\n📌 Valor: *[valor]*\n\nEscolha uma das opções abaixo para receber a cobrança atualizada e evitar novos encargos:',
+  COBRANCA_PENDENTE: 'Olá, [nome], como vai?\n\nNotamos que os honorários da *CECIM Assessoria Contábil* se encontram em aberto. Sabemos como a correria do dia a dia é intensa, por isso facilitamos para você:\n\n📌 Vencimento: *[vencimento]*\n📌 Valor: *[valor]*\n\nEscolha uma das opções abaixo para receber a cobrança atualizada e evitar novos encargos:',
 };
 // Mesmos botões e rodapé que o servidor envia à Meta (BOTOES_COBRANCA / RODAPE_COBRANCA).
 const BOTOES_MODELO = { BOLETO_DISPONIVEL: ['Pix', 'Boleto'], COBRANCA_PENDENTE: ['Pix Copia e Cola', 'Novo Boleto'], LEMBRETE_VENCIMENTO: ['Pix', 'Boleto'], CONFIRMACAO_PAGAMENTO: [] };
@@ -1595,6 +1595,7 @@ async function loadTemplates() {
             <div style="font-size:12px; color:var(--muted); margin-top:4px;">Use *texto* para <strong>negrito</strong>. Não comece nem termine o texto com um campo, e não coloque dois campos colados (regra da Meta).</div>
             <div style="display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;">
               <button onclick="enviarModeloMeta('${tipo}')">Enviar para aprovação da Meta</button>
+              ${SUGESTAO_COM_BOTOES[tipo] ? `<button class="secondary" onclick="usarTextoSugerido('${tipo}')" title="Troca o texto da caixa pelo texto sugerido (com honorários). Nada é enviado à Meta.">Usar texto sugerido</button>` : ''}
               ${t.pendenteNome ? `<button class="secondary" onclick="verificarModeloMeta('${tipo}')">Verificar aprovação</button>` : ''}
             </div>
             <div id="modelo-msg-${tipo}" style="font-size:13px; margin-top:8px;"></div>
@@ -1613,6 +1614,15 @@ async function loadTemplates() {
   } catch (e) {
     el.innerHTML = '<div class="empty">' + e.message + '</div>';
   }
+}
+
+/** Preenche o editor com o texto sugerido; só vai para a Meta quando você clicar em "Enviar para aprovação". */
+function usarTextoSugerido(tipo) {
+  if (!SUGESTAO_COM_BOTOES[tipo]) return;
+  const caixa = document.getElementById('modelo-texto-' + tipo);
+  if (caixa.value.trim() && caixa.value !== SUGESTAO_COM_BOTOES[tipo] && !confirm('Trocar o texto da caixa pelo texto sugerido?')) return;
+  caixa.value = SUGESTAO_COM_BOTOES[tipo];
+  atualizarPrevia(tipo);
 }
 
 function atualizarPrevia(tipo) {
@@ -1837,7 +1847,7 @@ async function runImport() {
             clientId: client.id,
             amountCents: r.amountCents,
             dueDate: r.dueDate,
-            description: 'Mensalidade',
+            description: 'Honorários',
           }),
         });
         line.textContent = 'OK: ' + r.nome + ' (cliente + cobrança criados)';
@@ -1881,7 +1891,7 @@ async function createTestCharge() {
   msgEl.textContent = '';
   msgEl.style.color = '';
   const clientId = document.getElementById('test-charge-client').value;
-  const description = document.getElementById('test-charge-desc').value.trim() || 'Mensalidade';
+  const description = document.getElementById('test-charge-desc').value.trim() || 'Honorários';
   const amountCents = valorParaCentavos(document.getElementById('test-charge-amount').value);
   const dueDate = document.getElementById('test-charge-duedate').value;
   if (!clientId) {

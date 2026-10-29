@@ -53,7 +53,7 @@ export const VARIAVEIS_MODELO: Record<string, string> = {
   valor: 'R$ 150,00',
   linhaDigitavel: '07790001161206142039908513267545515860000015000',
   diasAtraso: '5',
-  descricao: 'Mensalidade 10/2026',
+  descricao: 'Honorários 10/2026',
 };
 
 /** Botões de resposta rápida de cada modelo de cobrança. */

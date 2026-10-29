@@ -351,7 +351,7 @@ export class BoletosService {
         const charge = await this.prisma.charge.create({
           data: {
             clientId: cliente.id,
-            description: `Mensalidade ${b.vencimento.slice(5, 7)}/${b.vencimento.slice(0, 4)}`,
+            description: `Honorários ${b.vencimento.slice(5, 7)}/${b.vencimento.slice(0, 4)}`,
             amountCents: b.valorCents,
             dueDate: vencimento,
             status: b.vencimento < hoje ? 'VENCIDA' : 'PENDENTE',

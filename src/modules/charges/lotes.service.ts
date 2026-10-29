@@ -202,7 +202,7 @@ export class LotesService {
     const charge = await this.prisma.charge.create({
       data: {
         clientId: cliente.id,
-        description: `Mensalidade ${m}/${ano}`,
+        description: `Honorários ${m}/${ano}`,
         amountCents: l.valorCents!,
         dueDate: new Date(`${l.vencimento}T00:00:00.000Z`),
         origem: 'MENSAL',

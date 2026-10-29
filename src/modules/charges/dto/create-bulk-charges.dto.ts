@@ -2,7 +2,7 @@ import { ArrayMinSize, IsArray, IsDateString, IsInt, IsOptional, IsPositive, IsS
 
 /**
  * Cria a mesma cobrança para uma lista de clientes selecionados de uma vez
- * (ex: mensalidade do mês para os clientes escolhidos).
+ * (ex: honorários do mês para os clientes escolhidos).
  */
 export class CreateBulkChargesDto {
   @IsArray()
