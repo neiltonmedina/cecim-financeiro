@@ -567,6 +567,7 @@
         <div class="card-head"><div><h3>Cobranças que não foram enviadas</h3>
           <div class="hint">Cobranças em aberto cujo WhatsApp falhou ou que não podem ser enviadas (sem boleto ou sem telefone). Resolva e envie direto daqui.</div></div>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="secondary" onclick="limparTodosAvisos()" title="Tira da lista os avisos de sem telefone e de falha no envio. Não apaga nenhuma cobrança.">🧹 Limpar todos os avisos</button>
             <button class="secondary" onclick="recuperarBoletosCriados(this)" title="Procura no Inter os boletos que já foram criados e liga às cobranças sem boleto. Nunca cria boleto novo.">🔎 Procurar boletos já criados no Inter</button>
             <button class="secondary" onclick="loadProblemas()">Atualizar</button>
           </div></div>
@@ -2348,6 +2349,18 @@ const CAMPOS_INTER_PT = {
   multa: 'multa (configuração da empresa)', mora: 'juros de mora (configuração da empresa)',
 };
 /** Erro de boleto gravado antes da tradução (JSON cru do Inter) -> texto em português. */
+async function limparTodosAvisos() {
+  if (!confirm('Limpar todos os avisos de Com problema?\n\n• Sem telefone: o aviso sai e o cliente fica sem WhatsApp até você cadastrar o número.\n• Falha no envio: o aviso sai (volta só se falhar de novo).\n• Sem boleto: continua, porque falta gerar o boleto.\n\nNenhuma cobrança é apagada e os boletos continuam normais.')) return;
+  try {
+    const r = await api('/charges/limpar-avisos', { method: 'POST' });
+    alert(`Avisos limpos: ${r.semTelefone} sem telefone e ${r.falhas} falha(s) no envio.` +
+      (r.semBoletoMantidos ? `\n\n${r.semBoletoMantidos} "Sem boleto" continua(m) na lista: gere o boleto deles.` : ''));
+    loadProblemas();
+  } catch (e) {
+    alert('Não foi possível limpar: ' + e.message);
+  }
+}
+
 async function ignorarSemTelefone(clientIds) {
   const n = clientIds.length;
   if (!confirm(`Excluir ${n === 1 ? 'o aviso deste cliente' : 'os avisos de ' + n + ' clientes'} sem telefone?\n\nSó o aviso sai da lista "Com problema" - a cobrança e o boleto continuam normais. Sem telefone, o cliente não recebe mensagens pelo WhatsApp.\n\nPara voltar a enviar, é só cadastrar o telefone (em Clientes ou em "Cadastrar telefone e enviar").`)) return;

@@ -21,6 +21,8 @@ const ACOES: Record<string, [string, Resumo?]> = {
   'POST /charges/dispatch': ['Disparou cobrança pelo WhatsApp', qtd('chargeIds', 'cobrança(s)')],
   'POST /charges/dispatch/agendar': ['Agendou disparo', (req) => `${(req.body?.chargeIds ?? []).length} cobrança(s) para ${new Date(req.body?.executarEm).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`],
   'DELETE /charges/dispatch/agendados/:id': ['Cancelou disparo agendado'],
+  'POST /charges/limpar-avisos': ['Limpou os avisos de Com problema', (req, res) => `${res?.semTelefone ?? 0} sem telefone · ${res?.falhas ?? 0} falha(s) de envio`],
+  'POST /charges/recuperar-boletos': ['Procurou boletos já criados no Inter', (req, res) => `${res?.vinculados?.length ?? 0} ligado(s)`],
   'POST /boletos/inter/importar': ['Importou boletos do Inter', (req, res) => `${res?.importadas ?? (req.body?.codigos ?? []).length} boleto(s)`],
   'POST /boletos/webhook/registrar': ['Ativou o aviso de pagamento do Inter'],
   'POST /lotes': ['Iniciou geração dos boletos do mês', (req) => `${req.body?.mes} · aviso ${req.body?.diasAntes} dia(s) antes · envio automático ${req.body?.envioAutomatico ? 'ligado' : 'desligado'}`],

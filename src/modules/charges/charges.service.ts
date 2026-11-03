@@ -88,8 +88,11 @@ export class ChargesService {
     return abertas
       .map((c) => {
         const ultimo = c.notifications[0];
+        // Falha já "limpa" no painel não volta a aparecer - só uma falha nova (depois da limpeza).
+        const falhaDispensada =
+          !!c.avisoDispensadoEm && !!ultimo && (ultimo.failedAt ?? ultimo.queuedAt) <= c.avisoDispensadoEm;
         const problema =
-          ultimo?.status === 'FAILED' ? 'FALHA_ENVIO'
+          ultimo?.status === 'FAILED' && !falhaDispensada ? 'FALHA_ENVIO'
           : !c.linhaDigitavel && !c.pixCopiaECola ? 'SEM_BOLETO'
           // Cliente marcado como "não usa WhatsApp" (só boleto) não é problema.
           : !telefonesDoCliente(c.client).length && c.client.whatsappOptIn ? 'SEM_TELEFONE'
@@ -97,6 +100,27 @@ export class ChargesService {
         return problema ? { ...c, problema } : null;
       })
       .filter(Boolean);
+  }
+
+  /**
+   * "Limpar todos os avisos" de Com problema, sem apagar cobrança: sem telefone vira
+   * "não usa WhatsApp" e falha de envio é dispensada. "Sem boleto" fica (falta o boleto).
+   */
+  async limparAvisos() {
+    const lista = (await this.problemas()) as any[];
+    const clientesSemTelefone = [...new Set(lista.filter((c) => c.problema === 'SEM_TELEFONE').map((c) => c.clientId as string))];
+    const falhas = lista.filter((c) => c.problema === 'FALHA_ENVIO').map((c) => c.id as string);
+    if (clientesSemTelefone.length) {
+      await this.prisma.client.updateMany({ where: { id: { in: clientesSemTelefone } }, data: { whatsappOptIn: false } });
+    }
+    if (falhas.length) {
+      await this.prisma.charge.updateMany({ where: { id: { in: falhas } }, data: { avisoDispensadoEm: new Date() } });
+    }
+    return {
+      semTelefone: lista.filter((c) => c.problema === 'SEM_TELEFONE').length,
+      falhas: falhas.length,
+      semBoletoMantidos: lista.filter((c) => c.problema === 'SEM_BOLETO').length,
+    };
   }
 
   async findOne(id: string) {

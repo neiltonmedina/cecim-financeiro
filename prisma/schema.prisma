@@ -85,6 +85,7 @@ model Charge {
   updatedAt     DateTime     @updatedAt
   paidAt        DateTime?
   valorPagoCents Int? // valor efetivamente recebido (com multa/juros), quando o Inter informa
+  avisoDispensadoEm DateTime? // "Limpar avisos": falha de envio até esta data não aparece mais em Com problema
   canceledAt    DateTime?
 
   // Boleto emitido via API do Banco Inter (quando configurado)

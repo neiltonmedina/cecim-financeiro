@@ -52,6 +52,12 @@ export class ChargesController {
     return this.agendados.cancelar(id);
   }
 
+  /** Limpa os avisos de Com problema (sem telefone e falha de envio) sem apagar cobranças. */
+  @Post('limpar-avisos')
+  limparAvisos() {
+    return this.chargesService.limparAvisos();
+  }
+
   /** Liga às cobranças sem boleto os boletos que já foram criados no Inter (nunca cria boleto). */
   @Post('recuperar-boletos')
   recuperarBoletos() {
