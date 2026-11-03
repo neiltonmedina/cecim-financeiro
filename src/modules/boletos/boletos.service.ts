@@ -161,6 +161,11 @@ export class BoletosService {
       });
     } catch (error: any) {
       const message = traduzirErroInter(error);
+      if (/mesmos dados|c[óo]digo de solicita/i.test(`${message} ${JSON.stringify(error.response?.data ?? '')}`)) {
+        // O Inter recusou por já existir a mesma cobrança (criada há pouco): liga a ela em vez de dar erro.
+        const ligado = await this.vincularBoletoExistente(charge, client).catch(() => null);
+        if (ligado) return ligado;
+      }
       this.logger.error(
         `Falha ao gerar boleto no Inter para cobrança ${charge.id}: ${message}` +
           (error.response?.data ? ` | resposta do Inter: ${JSON.stringify(error.response.data)}` : ''),
@@ -177,7 +182,10 @@ export class BoletosService {
    * vencimento e valor) e o liga a ela, sem criar outro. Cobre o caso em que o
    * boleto foi criado mas o painel não guardou o código (falha logo depois de criar).
    */
-  async vincularBoletoExistente(charge: Charge, client: Client): Promise<Charge | null> {
+  async vincularBoletoExistente(
+    charge: Pick<Charge, 'id' | 'amountCents' | 'dueDate' | 'boletoDataVencimento'>,
+    client: Pick<Client, 'document'>,
+  ): Promise<Charge | null> {
     const documento = soDigitos(client.document);
     if (!documento || !this.inter.isConfigured()) return null;
     const vencimento = (charge.boletoDataVencimento ?? charge.dueDate).toISOString().slice(0, 10);
@@ -205,6 +213,30 @@ export class BoletosService {
       });
     }
     return null;
+  }
+
+  /**
+   * Para todas as cobranças em aberto sem boleto guardado: procura no Inter o boleto
+   * que já foi criado e liga à cobrança. Nunca cria boleto.
+   */
+  async recuperarBoletosCriados(): Promise<{ vinculados: string[]; naoEncontrados: string[]; erros: string[] }> {
+    const resultado = { vinculados: [] as string[], naoEncontrados: [] as string[], erros: [] as string[] };
+    if (!this.inter.isConfigured()) return resultado;
+    const semBoleto = await this.prisma.charge.findMany({
+      where: { boletoCodigoSolicitacao: null, status: { in: ['PENDENTE', 'ENVIADA', 'VENCIDA'] } },
+      omit: { boletoPdfBase64: true },
+      include: { client: true },
+    });
+    for (const c of semBoleto) {
+      try {
+        const ligado = await this.vincularBoletoExistente(c, c.client);
+        (ligado ? resultado.vinculados : resultado.naoEncontrados).push(c.client.name);
+      } catch (error: any) {
+        resultado.erros.push(`${c.client.name}: ${error.message}`);
+      }
+    }
+    this.logger.log(`Recuperação de boletos: ${resultado.vinculados.length} vinculado(s), ${resultado.naoEncontrados.length} não encontrado(s).`);
+    return resultado;
   }
 
   /** PDF do boleto: o guardado ou, se ainda não veio, buscado no Inter (e guardado). */

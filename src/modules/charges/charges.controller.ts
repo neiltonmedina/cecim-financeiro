@@ -52,6 +52,12 @@ export class ChargesController {
     return this.agendados.cancelar(id);
   }
 
+  /** Liga às cobranças sem boleto os boletos que já foram criados no Inter (nunca cria boleto). */
+  @Post('recuperar-boletos')
+  recuperarBoletos() {
+    return this.chargesService.recuperarBoletos();
+  }
+
   @Get()
   findAll(
     @Query('status') status?: ChargeStatus,

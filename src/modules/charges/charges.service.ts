@@ -153,6 +153,10 @@ export class ChargesService {
    * falhou na criação). Nunca gera se já existe boleto - evita duplicata. Se o
    * vencimento já passou, usa hoje (o Inter não aceita data passada).
    */
+  recuperarBoletos() {
+    return this.boletosService.recuperarBoletosCriados();
+  }
+
   async gerarBoleto(id: string) {
     const charge = await this.findOne(id);
     if (charge.status === 'PAGA' || charge.status === 'CANCELADA') {

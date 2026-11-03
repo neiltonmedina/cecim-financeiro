@@ -566,7 +566,10 @@
       <div class="card">
         <div class="card-head"><div><h3>Cobranças que não foram enviadas</h3>
           <div class="hint">Cobranças em aberto cujo WhatsApp falhou ou que não podem ser enviadas (sem boleto ou sem telefone). Resolva e envie direto daqui.</div></div>
-          <button class="secondary" onclick="loadProblemas()">Atualizar</button></div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="secondary" onclick="recuperarBoletosCriados(this)" title="Procura no Inter os boletos que já foram criados e liga às cobranças sem boleto. Nunca cria boleto novo.">🔎 Procurar boletos já criados no Inter</button>
+            <button class="secondary" onclick="loadProblemas()">Atualizar</button>
+          </div></div>
         <div class="chips" id="problemas-filtros"></div>
         <div id="problemas-content" class="loading">Carregando...</div>
       </div>
@@ -2333,10 +2336,30 @@ const CAMPOS_INTER_PT = {
   multa: 'multa (configuração da empresa)', mora: 'juros de mora (configuração da empresa)',
 };
 /** Erro de boleto gravado antes da tradução (JSON cru do Inter) -> texto em português. */
+async function recuperarBoletosCriados(btn) {
+  if (!confirm('Procurar no Inter os boletos que já foram criados para as cobranças sem boleto?\n\nO painel só liga os boletos que já existem (mesmo cliente, vencimento e valor). Nenhum boleto novo é criado.')) return;
+  btn.disabled = true;
+  const texto = btn.textContent;
+  btn.textContent = 'Procurando no Inter...';
+  try {
+    const r = await api('/charges/recuperar-boletos', { method: 'POST' });
+    alert(`${r.vinculados.length} boleto(s) encontrado(s) no Inter e ligado(s) às cobranças.` +
+      (r.naoEncontrados.length ? `\n\n${r.naoEncontrados.length} sem boleto no Inter (esses precisam ser gerados): ${r.naoEncontrados.join(', ')}` : '') +
+      (r.erros.length ? `\n\nErro ao consultar: ${r.erros.join('; ')}` : ''));
+    loadProblemas();
+    atualizarBadgeProblemas();
+  } catch (e) {
+    alert('Não foi possível consultar o Inter: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = texto;
+  }
+}
+
 function traduzirBoletoErro(texto) {
   const t = String(texto || '');
   // Falha só no PDF (Inter ainda processando): o boleto pode já existir no Inter.
-  if (/Gerar PDF|processamento da cobranca/i.test(t)) {
+  if (/Gerar PDF|processamento da cobranca|mesmos dados/i.test(t)) {
     return 'O Inter criou o boleto, mas o PDF ainda estava em processamento. Clique em "Gerar boleto": o painel procura o boleto que já existe no Inter antes de criar outro (não duplica).';
   }
   if (!t.trim().startsWith('{')) return t;

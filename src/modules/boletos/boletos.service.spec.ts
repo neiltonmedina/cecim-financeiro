@@ -165,3 +165,51 @@ describe('BoletosService.vincularBoletoExistente - não duplicar boleto já cria
     expect(prisma.charge.update).not.toHaveBeenCalled();
   });
 });
+
+describe('BoletosService - Inter recusa por cobrança igual recente', () => {
+  it('liga ao boleto que o Inter diz que já existe, em vez de guardar erro', async () => {
+    const charge: any = { id: 'ch-1', amountCents: 44500, dueDate: new Date('2026-11-05T00:00:00Z'), boletoDataVencimento: null };
+    const prisma: any = {
+      charge: { findFirst: jest.fn().mockResolvedValue(null), update: jest.fn().mockImplementation(({ data }) => Promise.resolve({ ...charge, ...data })) },
+    };
+    const recusa = Object.assign(new Error('Request failed with status code 400'), {
+      response: { status: 400, data: { title: 'Requisição inválida', detail: 'Não será possível emitir a cobrança. Pois, existe uma cobrança emitida há poucos minutos com os mesmos dados com a situação "a receber" com código de solicitação: d039c7ae' } },
+    });
+    const inter: any = {
+      isConfigured: () => true,
+      createBoleto: jest.fn().mockRejectedValue(recusa),
+      listarCobrancas: jest.fn().mockResolvedValue([{ cobranca: { codigoSolicitacao: 'd039c7ae', situacao: 'A_RECEBER', valorNominal: 445, dataVencimento: '2026-11-05', pagador: {} }, boleto: { linhaDigitavel: 'L' } }]),
+      baixarPdf: jest.fn().mockResolvedValue('PDF'),
+    };
+    const { BoletosService } = require('./boletos.service');
+    const service = new BoletosService(prisma, inter, { get: () => 'https://app' } as any);
+    const r = await service.gerarBoletoParaCobranca(charge, { document: '43610462000133' });
+    expect(r.boletoCodigoSolicitacao).toBe('d039c7ae');
+    expect(prisma.charge.update.mock.calls.every((c: any) => !c[0].data.boletoErro)).toBe(true);
+  });
+
+  it('procura em lote só liga o que existe e nunca cria boleto', async () => {
+    const prisma: any = {
+      charge: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'a', amountCents: 44500, dueDate: new Date('2026-11-05T00:00:00Z'), boletoDataVencimento: null, client: { name: 'KATIA', document: '43610462000133' } },
+          { id: 'b', amountCents: 10000, dueDate: new Date('2026-11-06T00:00:00Z'), boletoDataVencimento: null, client: { name: 'AGS', document: '26371128000155' } },
+        ]),
+        findFirst: jest.fn().mockResolvedValue(null),
+        update: jest.fn().mockImplementation(({ data }) => Promise.resolve(data)),
+      },
+    };
+    const inter: any = {
+      isConfigured: () => true,
+      createBoleto: jest.fn(),
+      listarCobrancas: jest.fn().mockImplementation(({ cpfCnpj }: any) =>
+        Promise.resolve(cpfCnpj === '43610462000133' ? [{ cobranca: { codigoSolicitacao: 'k1', situacao: 'A_RECEBER', valorNominal: 445, dataVencimento: '2026-11-05', pagador: {} } }] : []),
+      ),
+      baixarPdf: jest.fn().mockResolvedValue('PDF'),
+    };
+    const { BoletosService } = require('./boletos.service');
+    const r = await new BoletosService(prisma, inter, { get: () => 'https://app' } as any).recuperarBoletosCriados();
+    expect(r).toEqual({ vinculados: ['KATIA'], naoEncontrados: ['AGS'], erros: [] });
+    expect(inter.createBoleto).not.toHaveBeenCalled();
+  });
+});
