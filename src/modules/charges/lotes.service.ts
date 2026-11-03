@@ -232,10 +232,25 @@ export class LotesService {
 
   async listar() {
     const lotes = await this.prisma.loteMensal.findMany({ orderBy: { createdAt: 'desc' }, take: 24 });
-    const contagens = await this.prisma.charge.groupBy({ by: ['loteId', 'status'], where: { loteId: { in: lotes.map((l) => l.id) } }, _count: true });
+    const ids = lotes.map((l) => l.id);
+    const contagens = await this.prisma.charge.groupBy({ by: ['loteId', 'status'], where: { loteId: { in: ids } }, _count: true });
+    // Quantos têm boleto de fato no Inter (código guardado) e o valor - para conferir com o Inter.
+    const comBoleto = await this.prisma.charge.groupBy({
+      by: ['loteId'],
+      where: { loteId: { in: ids }, boletoCodigoSolicitacao: { not: null }, status: { not: 'CANCELADA' } },
+      _count: true,
+      _sum: { amountCents: true },
+    });
     return lotes.map((l) => {
       const porStatus = Object.fromEntries(contagens.filter((c) => c.loteId === l.id).map((c) => [c.status, c._count]));
-      return { ...l, porStatus, total: Object.values(porStatus).reduce((a: number, b: any) => a + b, 0) };
+      const b = comBoleto.find((c) => c.loteId === l.id);
+      return {
+        ...l,
+        porStatus,
+        total: Object.values(porStatus).reduce((a: number, x: any) => a + x, 0),
+        comBoleto: b?._count ?? 0,
+        valorComBoletoCents: b?._sum.amountCents ?? 0,
+      };
     });
   }
 
