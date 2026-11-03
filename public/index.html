@@ -1542,9 +1542,15 @@ async function createClient() {
       msgEl.textContent = 'Cadastro salvo, mas o boleto não foi gerado. ' + e.message + ' Corrija e clique em salvar de novo.';
       return; // continua no formulário para corrigir
     }
+    const temTelefone = !!phoneE164 || telefonesExtrasDoForm().length > 0;
     cancelarEdicaoCliente();
     msgEl.textContent = '';
-    await redispararCobranca(pendente.chargeId, true, pendente.intervalDays);
+    if (temTelefone) {
+      await redispararCobranca(pendente.chargeId, true, pendente.intervalDays);
+    } else {
+      // Sem WhatsApp: o boleto foi gerado; só não há para onde enviar a mensagem.
+      alert('✅ Boleto gerado no Inter.\n\nNão foi enviado pelo WhatsApp porque o cliente não tem telefone cadastrado. Quando tiver o número, use "Cadastrar telefone e enviar" em Com problema.');
+    }
     switchTab(pendente.voltarPara);
     return;
   }
