@@ -3,7 +3,7 @@ import { ChargesService } from './charges.service';
 describe('ChargesService.problemas', () => {
   it('separa as cobranças em aberto que não foram ou não podem ser enviadas', async () => {
     const cobranca = (id: string, extra: any) => ({
-      id, linhaDigitavel: '0779', pixCopiaECola: null, notifications: [], client: { phoneE164: '+5594999999999' }, ...extra,
+      id, linhaDigitavel: '0779', pixCopiaECola: null, notifications: [], client: { phoneE164: '+5594999999999', whatsappOptIn: true }, ...extra,
     });
     const prisma: any = {
       charge: {
@@ -11,7 +11,9 @@ describe('ChargesService.problemas', () => {
           cobranca('ok', { notifications: [{ status: 'SENT' }] }),
           cobranca('falhou', { notifications: [{ status: 'FAILED' }] }),
           cobranca('sem-boleto', { linhaDigitavel: null }),
-          cobranca('sem-telefone', { client: { phoneE164: null } }),
+          cobranca('sem-telefone', { client: { phoneE164: null, whatsappOptIn: true } }),
+          // Marcado como "não usa WhatsApp": não aparece como problema.
+          cobranca('ignorado', { client: { phoneE164: null, whatsappOptIn: false } }),
         ]),
       },
     };

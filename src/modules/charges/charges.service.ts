@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ChargeStatus, TemplateType } from '@prisma/client';
+import { telefonesDoCliente } from '../clients/telefones.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ConversationsService } from '../conversations/conversations.service';
@@ -90,7 +91,8 @@ export class ChargesService {
         const problema =
           ultimo?.status === 'FAILED' ? 'FALHA_ENVIO'
           : !c.linhaDigitavel && !c.pixCopiaECola ? 'SEM_BOLETO'
-          : !c.client.phoneE164 ? 'SEM_TELEFONE'
+          // Cliente marcado como "não usa WhatsApp" (só boleto) não é problema.
+          : !telefonesDoCliente(c.client).length && c.client.whatsappOptIn ? 'SEM_TELEFONE'
           : null;
         return problema ? { ...c, problema } : null;
       })

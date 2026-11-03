@@ -49,10 +49,25 @@ describe('LotesService.gerarLinha - sem boleto duplicado', () => {
   });
 
   it('se o boleto do mês já existe, não gera de novo', async () => {
-    const { service, prisma, boletos } = setup({ id: 'antiga' });
+    const { service, prisma, boletos } = setup({ id: 'antiga', boletoCodigoSolicitacao: 'cod-antigo' });
     expect(await service.gerarLinha('L1', ELIO)).toMatchObject({ status: 'JA_GERADO', chargeId: 'antiga' });
     expect(prisma.charge.create).not.toHaveBeenCalled();
     expect(boletos.gerarBoletoParaCobranca).not.toHaveBeenCalled();
+  });
+});
+
+describe('LotesService.gerarLinha - cobrança já criada mas sem boleto', () => {
+  it('recupera ou gera o boleto dela (pelo Gerar boleto, que procura antes no Inter) em vez de pular', async () => {
+    const prisma: any = {
+      loteMensal: { findUnique: jest.fn().mockResolvedValue({ id: 'L1', mes: '2099-11' }) },
+      client: { findMany: jest.fn().mockResolvedValue([{ id: 'cli', name: 'ELIO', document: '04301559000102', cep: '1', endereco: 'r', bairro: 'b', cidade: 'c', uf: 'PA', phoneE164: '+559499', telefonesExtras: [] }]) },
+      charge: { findFirst: jest.fn().mockResolvedValue({ id: 'sem-boleto', boletoCodigoSolicitacao: null }), create: jest.fn() },
+    };
+    const charges: any = { gerarBoleto: jest.fn().mockResolvedValue({}) };
+    const r = await new LotesService(prisma, {} as any, charges, {} as any).gerarLinha('L1', ELIO);
+    expect(charges.gerarBoleto).toHaveBeenCalledWith('sem-boleto');
+    expect(prisma.charge.create).not.toHaveBeenCalled();
+    expect(r).toMatchObject({ status: 'OK', chargeId: 'sem-boleto' });
   });
 });
 
@@ -93,7 +108,7 @@ describe('Boletos do mês - telefone digitado na conferência', () => {
     };
     const boletos: any = { gerarBoletoParaCobranca: jest.fn().mockResolvedValue({ boletoCodigoSolicitacao: 'cod' }) };
     const r = await new LotesService(prisma, boletos, {} as any, {} as any).gerarLinha('L1', { ...ELIO, telefone: '94991112222' });
-    expect(prisma.client.update).toHaveBeenCalledWith({ where: { id: 'cli' }, data: { phoneE164: '+5594991112222' } });
+    expect(prisma.client.update).toHaveBeenCalledWith({ where: { id: 'cli' }, data: { phoneE164: '+5594991112222', whatsappOptIn: true } });
     expect(r).toMatchObject({ status: 'OK', temTelefone: true });
   });
 });

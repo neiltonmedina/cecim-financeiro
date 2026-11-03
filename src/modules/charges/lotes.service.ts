@@ -193,12 +193,21 @@ export class LotesService {
     } else {
       const semEndereco = !cliente.cep || !cliente.endereco || !cliente.bairro || !cliente.cidade || !cliente.uf;
       // Completa só o que falta: endereço (o Inter exige) e telefone (nunca troca o já cadastrado).
-      const completar = { ...(semEndereco ? l.endereco : {}), ...(l.telefone && !cliente.phoneE164 ? { phoneE164: l.telefone } : {}) };
+      const completar = { ...(semEndereco ? l.endereco : {}), ...(l.telefone && !cliente.phoneE164 ? { phoneE164: l.telefone, whatsappOptIn: true } : {}) };
       if (Object.keys(completar).length) cliente = await this.prisma.client.update({ where: { id: cliente.id }, data: completar });
     }
 
     const existente = await this.jaGerado(cliente.id, l.vencimento!, l.valorCents!);
-    if (existente) return { status: 'JA_GERADO', chargeId: existente.id, cliente: cliente.name };
+    if (existente?.boletoCodigoSolicitacao) return { status: 'JA_GERADO', chargeId: existente.id, cliente: cliente.name };
+    if (existente) {
+      // Cobrança já criada, mas o boleto falhou: recupera o que já existe no Inter ou gera (nunca duplica).
+      try {
+        await this.charges.gerarBoleto(existente.id);
+        return { status: 'OK', chargeId: existente.id, cliente: cliente.name, temTelefone: telefonesDoCliente(cliente).length > 0 };
+      } catch (error: any) {
+        return { status: 'ERRO_BOLETO', chargeId: existente.id, cliente: cliente.name, erro: error.message };
+      }
+    }
 
     const [ano, m] = lote.mes.split('-');
     const charge = await this.prisma.charge.create({
