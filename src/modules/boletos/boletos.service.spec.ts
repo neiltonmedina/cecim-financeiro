@@ -133,3 +133,35 @@ describe('Dados do cliente para o Inter', () => {
     );
   });
 });
+
+describe('BoletosService.vincularBoletoExistente - não duplicar boleto já criado no Inter', () => {
+  const charge: any = { id: 'ch-1', amountCents: 44500, dueDate: new Date('2026-11-05T00:00:00Z'), boletoDataVencimento: null };
+  const client: any = { document: '43610462000133' };
+  const item = (codigo: string, extra: any = {}) => ({
+    cobranca: { codigoSolicitacao: codigo, situacao: 'A_RECEBER', valorNominal: 445, dataVencimento: '2026-11-05', pagador: {}, ...extra },
+    boleto: { linhaDigitavel: 'LINHA' },
+    pix: { pixCopiaECola: 'PIX' },
+  });
+  function setup(itens: any[], dono: any = null) {
+    const prisma: any = {
+      charge: { findFirst: jest.fn().mockResolvedValue(dono), update: jest.fn().mockImplementation(({ data }) => Promise.resolve({ ...charge, ...data })) },
+    };
+    const inter: any = { isConfigured: () => true, listarCobrancas: jest.fn().mockResolvedValue(itens), baixarPdf: jest.fn().mockResolvedValue('PDF') };
+    const { BoletosService } = require('./boletos.service');
+    return { service: new BoletosService(prisma, inter, { get: () => 'https://app' } as any), prisma, inter };
+  }
+
+  it('acha o boleto do mesmo pagador, vencimento e valor e liga à cobrança', async () => {
+    const { service, inter, prisma } = setup([item('cancelado', { situacao: 'CANCELADO' }), item('outro-valor', { valorNominal: 500 }), item('certo')]);
+    const r = await service.vincularBoletoExistente(charge, client);
+    expect(inter.listarCobrancas).toHaveBeenCalledWith({ dataInicial: '2026-11-05', dataFinal: '2026-11-05', cpfCnpj: '43610462000133' });
+    expect(prisma.charge.update.mock.calls[0][0].data).toMatchObject({ boletoCodigoSolicitacao: 'certo', linhaDigitavel: 'LINHA', boletoPdfBase64: 'PDF', boletoErro: null });
+    expect(r.boletoCodigoSolicitacao).toBe('certo');
+  });
+
+  it('não pega boleto que já pertence a outra cobrança do painel', async () => {
+    const { service, prisma } = setup([item('certo')], { id: 'outra' });
+    expect(await service.vincularBoletoExistente(charge, client)).toBeNull();
+    expect(prisma.charge.update).not.toHaveBeenCalled();
+  });
+});

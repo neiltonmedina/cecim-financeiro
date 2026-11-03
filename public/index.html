@@ -2335,6 +2335,10 @@ const CAMPOS_INTER_PT = {
 /** Erro de boleto gravado antes da tradução (JSON cru do Inter) -> texto em português. */
 function traduzirBoletoErro(texto) {
   const t = String(texto || '');
+  // Falha só no PDF (Inter ainda processando): o boleto pode já existir no Inter.
+  if (/Gerar PDF|processamento da cobranca/i.test(t)) {
+    return 'O Inter criou o boleto, mas o PDF ainda estava em processamento. Clique em "Gerar boleto": o painel procura o boleto que já existe no Inter antes de criar outro (não duplica).';
+  }
   if (!t.trim().startsWith('{')) return t;
   try {
     const d = JSON.parse(t);

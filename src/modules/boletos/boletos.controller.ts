@@ -94,11 +94,11 @@ export class BoletosController {
    */
   @Get(':chargeId')
   async download(@Param('chargeId') chargeId: string, @Res() res: Response) {
-    const charge = await this.prisma.charge.findUnique({ where: { id: chargeId } });
-    if (!charge || !charge.boletoPdfBase64) {
+    const pdf = await this.boletosService.pdfDaCobranca(chargeId);
+    if (!pdf) {
       throw new NotFoundException('Boleto não encontrado ou ainda não gerado.');
     }
-    const buffer = Buffer.from(charge.boletoPdfBase64, 'base64');
+    const buffer = Buffer.from(pdf, 'base64');
     res.set({
       'Content-Type': 'application/pdf',
       'Content-Disposition': `inline; filename="boleto-${chargeId}.pdf"`,

@@ -155,15 +155,26 @@ export class ChargesService {
    */
   async gerarBoleto(id: string) {
     const charge = await this.findOne(id);
-    if (charge.boletoCodigoSolicitacao) {
-      throw new BadRequestException('Esta cobrança já tem boleto no Inter - não é gerado outro.');
-    }
     if (charge.status === 'PAGA' || charge.status === 'CANCELADA') {
       throw new BadRequestException('Cobrança paga ou cancelada.');
     }
     if (!this.boletosService.isConfigured()) {
       throw new BadRequestException('Integração com o Inter não configurada.');
     }
+    if (charge.boletoCodigoSolicitacao) {
+      // Boleto já existe (pode estar ainda em processamento no Inter): só completa linha digitável/Pix e PDF.
+      const completa = await this.boletosService.garantirLinhaDigitavel(charge);
+      await this.boletosService.pdfDaCobranca(id);
+      if (!completa.linhaDigitavel && !completa.pixCopiaECola) {
+        throw new BadRequestException('O boleto já existe no Inter, mas ainda está em processamento. Tente de novo em alguns minutos.');
+      }
+      return this.findOne(id);
+    }
+    // Antes de criar: o boleto pode já ter sido criado numa tentativa anterior que falhou logo depois.
+    const existente = await this.boletosService.vincularBoletoExistente(charge, charge.client).catch((e: any) => {
+      throw new BadRequestException('Não foi possível consultar o Inter antes de gerar (para não duplicar): ' + e.message);
+    });
+    if (existente) return existente;
     const hoje = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00.000Z');
     const base = charge.dueDate < hoje
       ? await this.prisma.charge.update({ where: { id }, data: { dueDate: hoje } })

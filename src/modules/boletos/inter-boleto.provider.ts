@@ -27,7 +27,8 @@ export function normalizarUf(valor?: string | null): string | undefined {
 
 export interface InterBoletoResult {
   codigoSolicitacao: string;
-  pdfBase64: string;
+  // Pode faltar: logo após criar, o Inter ainda está processando e não entrega o PDF.
+  pdfBase64?: string;
   pixCopiaECola?: string;
   linhaDigitavel?: string;
 }
@@ -174,11 +175,22 @@ export class InterBoletoProvider {
       throw new Error('O Inter não retornou o código da cobrança criada.');
     }
 
-    const pdfResponse = await this.getClient().get(`/cobranca/v3/cobrancas/${codigoSolicitacao}/pdf`, { headers });
-    const pdfBase64 = pdfResponse.data?.pdf;
-    if (!pdfBase64) {
-      throw new Error('O boleto foi criado, mas não foi possível obter o PDF.');
+    // O Inter cria a cobrança de forma assíncrona: nos primeiros segundos ela fica
+    // EM_PROCESSAMENTO e o PDF ainda não existe. Tenta de novo com espera (como o
+    // agente de boletos fazia) e, se ainda não vier, devolve o boleto sem PDF - o
+    // boleto existe e não pode ser tratado como falha (gerar de novo duplicaria).
+    let pdfBase64: string | undefined;
+    for (const [tentativa, esperaMs] of [0, 2000, 3000, 5000, 8000].entries()) {
+      if (esperaMs) await new Promise((r) => setTimeout(r, esperaMs));
+      try {
+        const pdfResponse = await this.getClient().get(`/cobranca/v3/cobrancas/${codigoSolicitacao}/pdf`, { headers });
+        pdfBase64 = pdfResponse.data?.pdf;
+        if (pdfBase64) break;
+      } catch (error: any) {
+        this.logger.log(`PDF de ${codigoSolicitacao} ainda indisponível (tentativa ${tentativa + 1}): ${error.response?.status ?? error.message}`);
+      }
     }
+    if (!pdfBase64) this.logger.warn(`Boleto ${codigoSolicitacao} criado sem PDF (Inter ainda processando) - será buscado depois.`);
 
     // Consulta os detalhes da cobrança para obter o Pix copia-e-cola e a linha
     // digitável do boleto (quando disponíveis).

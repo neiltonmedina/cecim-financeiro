@@ -147,7 +147,7 @@ export class BoletosService {
         where: { id: charge.id },
         data: {
           boletoCodigoSolicitacao: codigoSolicitacao,
-          boletoPdfBase64: pdfBase64,
+          boletoPdfBase64: pdfBase64 ?? null,
           pixCopiaECola: pixCopiaECola ?? null,
           linhaDigitavel: linhaDigitavel ?? null,
           boletoErro: null,
@@ -170,6 +170,51 @@ export class BoletosService {
         data: { boletoErro: message?.toString().slice(0, 500) },
       });
     }
+  }
+
+  /**
+   * Procura no Inter um boleto que já exista para esta cobrança (mesmo pagador,
+   * vencimento e valor) e o liga a ela, sem criar outro. Cobre o caso em que o
+   * boleto foi criado mas o painel não guardou o código (falha logo depois de criar).
+   */
+  async vincularBoletoExistente(charge: Charge, client: Client): Promise<Charge | null> {
+    const documento = soDigitos(client.document);
+    if (!documento || !this.inter.isConfigured()) return null;
+    const vencimento = (charge.boletoDataVencimento ?? charge.dueDate).toISOString().slice(0, 10);
+    const itens = await this.inter.listarCobrancas({ dataInicial: vencimento, dataFinal: vencimento, cpfCnpj: documento });
+    const candidatos = itens
+      .map(lerCobrancaInter)
+      .filter((b) => b.codigoSolicitacao && b.vencimento === vencimento && b.valorCents === charge.amountCents && !['CANCELADO', 'EXPIRADO', 'FALHA'].includes(b.situacao));
+    for (const b of candidatos) {
+      // Não reaproveita boleto que já pertence a outra cobrança do painel.
+      if (await this.prisma.charge.findFirst({ where: { boletoCodigoSolicitacao: b.codigoSolicitacao, id: { not: charge.id } } })) continue;
+      const pdf = await this.inter.baixarPdf(b.codigoSolicitacao).catch(() => undefined);
+      this.logger.log(`Cobrança ${charge.id}: boleto já existente no Inter (${b.codigoSolicitacao}) vinculado, sem gerar outro.`);
+      return this.prisma.charge.update({
+        where: { id: charge.id },
+        data: {
+          boletoCodigoSolicitacao: b.codigoSolicitacao,
+          externalRef: b.codigoSolicitacao,
+          boletoPdfBase64: pdf ?? null,
+          linhaDigitavel: b.linhaDigitavel,
+          pixCopiaECola: b.pixCopiaECola,
+          boletoDataVencimento: new Date(`${vencimento}T00:00:00.000Z`),
+          paymentLink: `${this.config.get<string>('appUrl')}/boletos/${charge.id}`,
+          boletoErro: null,
+        },
+      });
+    }
+    return null;
+  }
+
+  /** PDF do boleto: o guardado ou, se ainda não veio, buscado no Inter (e guardado). */
+  async pdfDaCobranca(chargeId: string): Promise<string | null> {
+    const c = await this.prisma.charge.findUnique({ where: { id: chargeId }, select: { boletoPdfBase64: true, boletoCodigoSolicitacao: true } });
+    if (!c) return null;
+    if (c.boletoPdfBase64 || !c.boletoCodigoSolicitacao || !this.inter.isConfigured()) return c.boletoPdfBase64;
+    const pdf = await this.inter.baixarPdf(c.boletoCodigoSolicitacao).catch(() => undefined);
+    if (pdf) await this.prisma.charge.update({ where: { id: chargeId }, data: { boletoPdfBase64: pdf } });
+    return pdf ?? null;
   }
 
   /**
@@ -428,7 +473,7 @@ export class BoletosService {
       where: { id: charge.id },
       data: {
         boletoCodigoSolicitacao: novo.codigoSolicitacao,
-        boletoPdfBase64: novo.pdfBase64,
+        boletoPdfBase64: novo.pdfBase64 ?? null, // sem PDF ainda: o link busca o novo no Inter
         pixCopiaECola: novo.pixCopiaECola ?? null,
         linhaDigitavel: novo.linhaDigitavel ?? null,
         externalRef: novo.codigoSolicitacao,
