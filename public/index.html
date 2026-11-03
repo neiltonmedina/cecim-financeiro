@@ -832,10 +832,12 @@ let mensalArquivo = '';
 function prepararMensal() {
   const mes = document.getElementById('mensal-mes-ref');
   if (!mes.value) {
-    // Padrão: mês seguinte (a planilha é enviada no fim do mês para o mês que começa).
+    // Padrão: do dia 20 em diante a planilha é do mês que vai começar; antes disso, do mês atual
+    // (ex: dia 03/11 -> novembro). Sempre dá para trocar.
     const d = new Date();
+    const diaDoMes = d.getDate();
     d.setDate(1);
-    d.setMonth(d.getMonth() + 1);
+    if (diaDoMes >= 20) d.setMonth(d.getMonth() + 1);
     mes.value = d.toLocaleDateString('en-CA').slice(0, 7);
   }
 }
