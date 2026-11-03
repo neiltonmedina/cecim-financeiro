@@ -2350,7 +2350,7 @@ const CAMPOS_INTER_PT = {
 /** Erro de boleto gravado antes da tradução (JSON cru do Inter) -> texto em português. */
 async function ignorarSemTelefone(clientIds) {
   const n = clientIds.length;
-  if (!confirm(`Ignorar ${n === 1 ? 'este cliente' : n + ' clientes'} sem telefone?\n\nEle(s) sai(em) da lista "Com problema" e não recebe(m) mensagens pelo WhatsApp. Os boletos continuam normais.\n\nPara voltar a enviar, é só cadastrar o telefone (em Clientes ou em "Cadastrar telefone e enviar").`)) return;
+  if (!confirm(`Excluir ${n === 1 ? 'o aviso deste cliente' : 'os avisos de ' + n + ' clientes'} sem telefone?\n\nSó o aviso sai da lista "Com problema" - a cobrança e o boleto continuam normais. Sem telefone, o cliente não recebe mensagens pelo WhatsApp.\n\nPara voltar a enviar, é só cadastrar o telefone (em Clientes ou em "Cadastrar telefone e enviar").`)) return;
   const falhas = [];
   for (const id of clientIds) {
     try {
@@ -2359,7 +2359,7 @@ async function ignorarSemTelefone(clientIds) {
       falhas.push(e.message);
     }
   }
-  if (falhas.length) alert('Alguns não foram ignorados: ' + [...new Set(falhas)].join('; '));
+  if (falhas.length) alert('Alguns avisos não foram excluídos: ' + [...new Set(falhas)].join('; '));
   loadProblemas();
 }
 
@@ -2509,7 +2509,7 @@ function renderProblemas() {
   const semTelefone = lista.filter((c) => c.problema === 'SEM_TELEFONE');
   if (semTelefone.length && problemasFiltro === 'SEM_TELEFONE') {
     html += `<div style="display:flex; align-items:center; gap:10px; margin-bottom:12px; padding:10px 12px; border:1px solid var(--border); border-radius:10px; flex-wrap:wrap;">
-      <button class="secondary" onclick="ignorarSemTelefone(${escHtml(JSON.stringify([...new Set(semTelefone.map((c) => c.clientId))]))})">🔕 Ignorar todos os ${semTelefone.length} sem telefone</button>
+      <button class="secondary" onclick="ignorarSemTelefone(${escHtml(JSON.stringify([...new Set(semTelefone.map((c) => c.clientId))]))})">🔕 Excluir os ${semTelefone.length} avisos de sem telefone</button>
       <span style="font-size:12px; color:var(--muted);">Para clientes que não usam WhatsApp: saem desta lista e não recebem mensagens. O boleto continua normal. Para voltar, cadastre o telefone.</span>
     </div>`;
   }
@@ -2530,7 +2530,7 @@ function renderProblemas() {
     } else {
       motivo = 'O cliente não tem WhatsApp cadastrado.';
       acoes = `<button onclick="editarTelefone('${c.clientId}', '', '${nome}', '${c.id}')">📞 Cadastrar telefone e enviar</button>
-        <button class="secondary" title="Este cliente não usa WhatsApp: some daqui e não recebe mensagens (o boleto continua)" onclick="ignorarSemTelefone(['${c.clientId}'])">🔕 Ignorar</button>`;
+        <button class="secondary" title="Este cliente não usa WhatsApp: some daqui e não recebe mensagens (o boleto continua)" onclick="ignorarSemTelefone(['${c.clientId}'])">🔕 Excluir aviso</button>`;
     }
     html += `<tr id="problema-${c.id}">
       ${semBoleto.length ? `<td>${c.problema === 'SEM_BOLETO' ? `<input type="checkbox" class="lote-boleto" data-id="${c.id}" data-nome="${escHtml(c.client?.name ?? '')}" onchange="contarLoteBoleto()" />` : ''}</td>` : ''}
@@ -2540,7 +2540,7 @@ function renderProblemas() {
       <td>${fmtDate(c.dueDate)}</td>
       <td style="max-width:320px;"><span style="font-weight:700; color:${tipo.cor};">⚠ ${tipo.label}</span><div style="font-size:12.5px; color:var(--muted); margin-top:2px;">${motivo}</div></td>
       <td><div style="display:flex; gap:6px; flex-wrap:wrap;">${acoes}
-        <button class="secondary" style="color:var(--red);" title="Excluir esta cobrança" onclick="excluirCobranca('${c.id}', '${nome}', ${!!c.boletoCodigoSolicitacao})">🗑 Excluir</button></div></td>
+        <button class="secondary" style="color:var(--red);" title="Apaga a cobrança do painel (e pode cancelar o boleto no Inter)" onclick="excluirCobranca('${c.id}', '${nome}', ${!!c.boletoCodigoSolicitacao})">🗑 Excluir cobrança</button></div></td>
     </tr>`;
   }
   el.innerHTML = html + '</tbody></table>';
