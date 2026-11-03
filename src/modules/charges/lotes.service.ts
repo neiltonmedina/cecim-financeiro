@@ -161,7 +161,9 @@ export class LotesService {
         documento: l.documento,
         valorCents: l.valorCents,
         vencimento: l.vencimento,
-        cliente: cliente ? { id: cliente.id, nome: cliente.name, telefones: telefonesDoCliente(cliente).length } : null,
+        cliente: cliente
+          ? { id: cliente.id, nome: cliente.name, telefones: telefonesDoCliente(cliente).length, telefonePrincipal: telefonesDoCliente(cliente)[0] ?? null }
+          : null,
         telefone: l.telefone,
         jaGerado: !!existente,
         // Cobrança criada, mas o boleto falhou no Inter: resolve em "Com problema" (Gerar boleto).

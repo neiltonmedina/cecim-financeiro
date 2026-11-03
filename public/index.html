@@ -826,6 +826,7 @@ const COLUNAS_MENSAL = {
 };
 const normCol = (t) => String(t ?? '').trim().toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ');
 let mensalLinhas = [];
+let mensalPlanilha = null; // { wb, aba, linhaCab, colTelefone, linhasDaPlanilha } para devolver a planilha com telefones
 let mensalConferencia = [];
 let mensalArquivo = '';
 
@@ -861,9 +862,10 @@ function lerPlanilhaMensal(event) {
       const idx = Object.fromEntries(Object.entries(COLUNAS_MENSAL).map(([campo, nomes]) => [campo, nomes.map(normCol).map((n) => cab.indexOf(n)).find((i) => i >= 0) ?? -1]));
       const faltando = ['nome', 'documento', 'valor', 'dia'].filter((c) => idx[c] < 0);
       if (faltando.length) throw new Error('colunas não encontradas: ' + faltando.join(', ') + '. Colunas lidas: ' + bruto[linhaCab].join(', '));
-      mensalLinhas = bruto.slice(linhaCab + 1)
-        .filter((r) => r.some((v) => String(v).trim()))
-        .map((r) => Object.fromEntries(Object.entries(idx).filter(([, i]) => i >= 0).map(([campo, i]) => [campo, String(r[i] ?? '').trim()])));
+      // Guarda a linha de cada registro na planilha original (para devolver a planilha com os telefones).
+      const comDados = bruto.map((r, i) => [r, i]).slice(linhaCab + 1).filter(([r]) => r.some((v) => String(v).trim()));
+      mensalLinhas = comDados.map(([r]) => Object.fromEntries(Object.entries(idx).filter(([, i]) => i >= 0).map(([campo, i]) => [campo, String(r[i] ?? '').trim()])));
+      mensalPlanilha = { wb, aba: wb.SheetNames[0], linhaCab, colTelefone: idx.telefone, colunas: bruto[linhaCab].length, linhasDaPlanilha: comDados.map(([, i]) => i) };
       await conferirMensal();
     } catch (err) {
       el.innerHTML = '<div class="empty" style="color:var(--red);">Não foi possível ler a planilha: ' + escHtml(err.message) + '</div>';
@@ -914,6 +916,7 @@ async function conferirMensal() {
     <div style="display:flex; gap:10px; align-items:center; margin-top:12px; flex-wrap:wrap;">
       ${validas.length ? `<button id="mensal-btn-gerar" onclick="gerarBoletosMensal()">Gerar ${validas.length} boleto(s) no Inter</button>` : ''}
       <span style="font-size:12.5px; color:var(--muted);">Nada é enviado aos clientes nesta etapa.</span>
+      <button class="secondary" onclick="baixarPlanilhaComTelefones()" title="Devolve a sua planilha com a coluna telefone preenchida pelo cadastro do painel (e pelo que você digitou aqui)">⬇ Baixar planilha com os telefones</button>
     </div>
     <div id="mensal-resultado" style="font-size:13px; margin-top:8px;"></div>`;
 }
@@ -936,6 +939,34 @@ function telefoneMensal(input) {
   const semTel = [...document.querySelectorAll('.mensal-tel')].filter((el) => !el.value.trim()).length;
   const el = document.getElementById('mensal-sem-tel');
   if (el) el.textContent = semTel;
+}
+
+/** Devolve a planilha original com a coluna "telefone": cadastro do painel ou o digitado na conferência; sem telefone fica em branco. */
+function baixarPlanilhaComTelefones() {
+  if (!mensalPlanilha) return;
+  const { wb, aba, linhaCab, colunas, linhasDaPlanilha } = mensalPlanilha;
+  const ws = wb.Sheets[aba];
+  let col = mensalPlanilha.colTelefone;
+  if (col < 0) {
+    col = colunas;
+    ws[XLSX.utils.encode_cell({ r: linhaCab, c: col })] = { t: 's', v: 'telefone' };
+    const ref = XLSX.utils.decode_range(ws['!ref']);
+    ref.e.c = Math.max(ref.e.c, col);
+    ws['!ref'] = XLSX.utils.encode_range(ref);
+    mensalPlanilha.colTelefone = col;
+  }
+  const porIndice = new Map(mensalConferencia.map((l) => [l.indice, l]));
+  let preenchidos = 0;
+  mensalLinhas.forEach((linha, i) => {
+    const conf = porIndice.get(i);
+    const tel = telefoneDaPlanilha(linha.telefone) || conf?.cliente?.telefonePrincipal || '';
+    // Gravado sem o +55, como se digita no Excel (o painel aceita dos dois jeitos).
+    const valor = tel.replace(/^\+55/, '');
+    if (valor) preenchidos++;
+    ws[XLSX.utils.encode_cell({ r: linhasDaPlanilha[i], c: col })] = { t: 's', v: valor };
+  });
+  XLSX.writeFile(wb, (mensalArquivo || 'planilha.xlsx').replace(/\.xlsx?$/i, '') + '_com_telefone.xlsx');
+  alert(`Planilha baixada: ${preenchidos} de ${mensalLinhas.length} com telefone. Os que ficaram em branco não têm telefone no painel: preencha no Excel ou nos campos da conferência.`);
 }
 
 async function gerarBoletosMensal() {
@@ -2003,6 +2034,11 @@ function carregarTelefonesPlanilha(event) {
     try {
       const wb = XLSX.read(e.target.result, { type: 'array' });
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
+      const colunas = Object.keys(rows[0] || {});
+      if (!colunas.some((c) => normCol(c) === 'telefone')) {
+        throw new Error('a planilha não tem a coluna "telefone". Colunas encontradas: ' + colunas.join(', ') +
+          '. Use "Baixar planilha com os telefones" na aba Boletos do mês para gerar essa coluna.');
+      }
       telefonesPlanilha = {};
       for (const r of rows) {
         const doc = normalizeDocument(r.cpf_cnpj);
