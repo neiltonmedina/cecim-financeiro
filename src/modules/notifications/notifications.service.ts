@@ -129,7 +129,13 @@ export class NotificationsService {
         skipped.push(`${charge.client.name}: cobrança sem boleto gerado no Inter`);
       }
       if (!channels.length) {
-        skipped.push('nenhum canal disponível (verifique telefone/e-mail e opt-in do cliente)');
+        skipped.push(
+          !telefonesDoCliente(charge.client).length
+            ? `${charge.client.name}: cliente sem WhatsApp cadastrado - cadastre o telefone em Clientes (ou "Cadastrar telefone e enviar" em Com problema)`
+            : !charge.client.whatsappOptIn
+              ? `${charge.client.name}: WhatsApp desativado no cadastro do cliente`
+              : `${charge.client.name}: nenhum canal disponível (verifique telefone/e-mail do cliente)`,
+        );
       }
 
       // Clique repetido: se esta cobrança já está na fila/enviando ou foi enviada há

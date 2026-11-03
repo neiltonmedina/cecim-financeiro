@@ -1,5 +1,7 @@
 import { IsArray, IsBoolean, IsEmail, IsOptional, IsString, Matches } from 'class-validator';
 
+export const TELEFONE_VALIDO = /^(\+55\d{10,11}|\+(?!55)[1-9]\d{7,14})$/;
+
 export class CreateClientDto {
   @IsString()
   name: string;
@@ -13,15 +15,16 @@ export class CreateClientDto {
   email?: string;
 
   @IsOptional()
-  @Matches(/^\+[1-9]\d{7,14}$/, {
-    message: 'phoneE164 deve estar no formato internacional, ex: +5511999998888',
+  // Brasil (+55): DDD + 8 ou 9 dígitos - barra número incompleto (ex: +55942122886).
+  @Matches(TELEFONE_VALIDO, {
+    message: 'Telefone inválido: use DDD + número com 8 ou 9 dígitos, ex: +5594991234567',
   })
   phoneE164?: string;
 
   // Outras pessoas da mesma empresa que também recebem as mensagens.
   @IsOptional()
   @IsArray()
-  @Matches(/^\+[1-9]\d{7,14}$/, { each: true, message: 'Cada telefone extra deve estar no formato +5511999998888' })
+  @Matches(TELEFONE_VALIDO, { each: true, message: 'Telefone extra inválido: use DDD + número com 8 ou 9 dígitos, ex: +5594991234567' })
   telefonesExtras?: string[];
 
   @IsOptional()
