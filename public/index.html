@@ -567,6 +567,7 @@
         <div class="card-head"><div><h3>Cobranças que não foram enviadas</h3>
           <div class="hint">Cobranças em aberto cujo WhatsApp falhou ou que não podem ser enviadas (sem boleto ou sem telefone). Resolva e envie direto daqui.</div></div>
           <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="secondary" onclick="conferirBoletosInter(this)" title="Confere no Inter todos os boletos em aberto: baixa os pagos, desliga os cancelados e atualiza Pix/linha digitável">🔍 Conferir boletos no Inter</button>
             <button class="secondary" onclick="limparTodosAvisos()" title="Tira da lista os avisos de sem telefone e de falha no envio. Não apaga nenhuma cobrança.">🧹 Limpar todos os avisos</button>
             <button class="secondary" onclick="recuperarBoletosCriados(this)" title="Procura no Inter os boletos que já foram criados e liga às cobranças sem boleto. Nunca cria boleto novo.">🔎 Procurar boletos já criados no Inter</button>
             <button class="secondary" onclick="loadProblemas()">Atualizar</button>
@@ -2349,6 +2350,25 @@ const CAMPOS_INTER_PT = {
   multa: 'multa (configuração da empresa)', mora: 'juros de mora (configuração da empresa)',
 };
 /** Erro de boleto gravado antes da tradução (JSON cru do Inter) -> texto em português. */
+async function conferirBoletosInter(btn) {
+  btn.disabled = true;
+  const texto = btn.textContent;
+  btn.textContent = 'Conferindo no Inter...';
+  try {
+    const r = await api('/charges/conferir-boletos', { method: 'POST' });
+    alert('Conferência no Inter concluída:\n\n' +
+      `• ${r.pagos} pagamento(s) registrado(s)\n` +
+      `• ${r.cancelados.length} boleto(s) cancelado(s)/expirado(s) no Inter` + (r.cancelados.length ? `: ${r.cancelados.join(', ')}. Eles aparecem agora em "Sem boleto": use "Procurar boletos já criados no Inter" e depois "Gerar boletos selecionados".` : '') + '\n' +
+      `• ${r.atualizados.length} com Pix/linha digitável atualizados` + (r.atualizados.length ? `: ${r.atualizados.join(', ')}` : ''));
+    loadProblemas();
+  } catch (e) {
+    alert('Não foi possível conferir: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = texto;
+  }
+}
+
 async function limparTodosAvisos() {
   if (!confirm('Limpar todos os avisos de Com problema?\n\n• Sem telefone: o aviso sai e o cliente fica sem WhatsApp até você cadastrar o número.\n• Falha no envio: o aviso sai (volta só se falhar de novo).\n• Sem boleto: continua, porque falta gerar o boleto.\n\nNenhuma cobrança é apagada e os boletos continuam normais.')) return;
   try {

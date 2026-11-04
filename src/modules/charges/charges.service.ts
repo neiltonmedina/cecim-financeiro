@@ -179,6 +179,14 @@ export class ChargesService {
    * falhou na criação). Nunca gera se já existe boleto - evita duplicata. Se o
    * vencimento já passou, usa hoje (o Inter não aceita data passada).
    */
+  /** Confere todos os boletos em aberto no Inter agora (pagos, cancelados e Pix/linha desatualizados). */
+  async conferirBoletos() {
+    const r = await this.boletosService.conferirBoletosNoInter();
+    let pagos = 0;
+    for (const p of r.pagas) if (await this.conversationsService.registrarPagamento(p.chargeId, p.valorRecebidoCents)) pagos++;
+    return { pagos, cancelados: r.cancelados, atualizados: r.atualizados };
+  }
+
   recuperarBoletos() {
     return this.boletosService.recuperarBoletosCriados();
   }

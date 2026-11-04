@@ -213,3 +213,35 @@ describe('BoletosService - Inter recusa por cobrança igual recente', () => {
     expect(inter.createBoleto).not.toHaveBeenCalled();
   });
 });
+
+describe('BoletosService.conferirBoletosNoInter', () => {
+  it('separa pagos, desliga cancelados e atualiza Pix desatualizado', async () => {
+    const abertas = [
+      { id: 'pago', boletoCodigoSolicitacao: 'c-pago', pixCopiaECola: 'P', linhaDigitavel: 'L', client: { name: 'A' } },
+      { id: 'cancelado', boletoCodigoSolicitacao: 'c-canc', pixCopiaECola: 'P', linhaDigitavel: 'L', client: { name: 'KATIA' } },
+      { id: 'velho', boletoCodigoSolicitacao: 'c-velho', pixCopiaECola: 'PIX-VELHO', linhaDigitavel: 'L', client: { name: 'C' } },
+      { id: 'ok', boletoCodigoSolicitacao: 'c-ok', pixCopiaECola: 'P', linhaDigitavel: 'L', client: { name: 'D' } },
+    ];
+    const situacoes: Record<string, any> = {
+      'c-pago': { situacao: 'RECEBIDO', valorTotalRecebido: 455 },
+      'c-canc': { situacao: 'CANCELADO' },
+      'c-velho': { situacao: 'A_RECEBER' },
+      'c-ok': { situacao: 'A_RECEBER' },
+    };
+    const prisma: any = { charge: { findMany: jest.fn().mockResolvedValue(abertas), update: jest.fn() } };
+    const inter: any = {
+      isConfigured: () => true,
+      consultarBruto: jest.fn().mockImplementation((cod: string) =>
+        Promise.resolve({ cobranca: { codigoSolicitacao: cod, ...situacoes[cod] }, boleto: { linhaDigitavel: 'L' }, pix: { pixCopiaECola: cod === 'c-velho' ? 'PIX-NOVO' : 'P' } }),
+      ),
+    };
+    const { BoletosService } = require('./boletos.service');
+    const r = await new BoletosService(prisma, inter, { get: () => '' } as any).conferirBoletosNoInter();
+
+    expect(r).toEqual({ pagas: [{ chargeId: 'pago', valorRecebidoCents: 45500 }], cancelados: ['KATIA'], atualizados: ['C'] });
+    const atualizacoes = Object.fromEntries(prisma.charge.update.mock.calls.map((c: any) => [c[0].where.id, c[0].data]));
+    expect(atualizacoes.cancelado).toMatchObject({ boletoCodigoSolicitacao: null, pixCopiaECola: null, linhaDigitavel: null });
+    expect(atualizacoes.velho).toMatchObject({ pixCopiaECola: 'PIX-NOVO' });
+    expect(atualizacoes.ok).toBeUndefined();
+  });
+});

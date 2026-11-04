@@ -36,6 +36,8 @@ export function traduzirErroInter(error: any): string {
 /** Situações do Inter que ainda podem ser cobradas. */
 const SITUACOES_EM_ABERTO = ['A_RECEBER', 'ATRASADO'];
 export const SITUACOES_PAGAS = ['RECEBIDO', 'MARCADO_RECEBIDO', 'PAGO', 'LIQUIDADO'];
+/** Boleto que não pode mais ser pago (o Pix dele dá "QR Code expirou" no banco). */
+const SITUACOES_SEM_VALOR = ['CANCELADO', 'EXPIRADO', 'FALHA'];
 
 const soDigitos = (v: unknown) => String(v ?? '').replace(/\D/g, '');
 
@@ -283,22 +285,58 @@ export class BoletosService {
    * (com multa/juros, se pago atrasado).
    */
   async cobrancasPagasNoInter(): Promise<{ chargeId: string; valorRecebidoCents?: number }[]> {
-    if (!this.inter.isConfigured()) return [];
+    return (await this.conferirBoletosNoInter()).pagas;
+  }
+
+  /**
+   * Confere no Inter cada boleto em aberto: devolve os pagos; boleto cancelado ou
+   * expirado deixa de valer na cobrança (vira "Sem boleto", para recuperar ou gerar
+   * outro - o Pix/linha antigos não funcionam mais); Pix ou linha digitável
+   * diferentes do Inter são atualizados.
+   */
+  async conferirBoletosNoInter(): Promise<{
+    pagas: { chargeId: string; valorRecebidoCents?: number }[];
+    cancelados: string[];
+    atualizados: string[];
+  }> {
+    const resultado = { pagas: [] as { chargeId: string; valorRecebidoCents?: number }[], cancelados: [] as string[], atualizados: [] as string[] };
+    if (!this.inter.isConfigured()) return resultado;
     const abertas = await this.prisma.charge.findMany({
       where: { status: { in: ['PENDENTE', 'ENVIADA', 'VENCIDA'] }, boletoCodigoSolicitacao: { not: null } },
-      select: { id: true, boletoCodigoSolicitacao: true },
+      select: { id: true, boletoCodigoSolicitacao: true, pixCopiaECola: true, linhaDigitavel: true, client: { select: { name: true } } },
     });
-    const pagas: { chargeId: string; valorRecebidoCents?: number }[] = [];
     for (const c of abertas) {
       try {
         const b = lerCobrancaInter(await this.inter.consultarBruto(c.boletoCodigoSolicitacao!));
-        if (SITUACOES_PAGAS.includes(b.situacao)) pagas.push({ chargeId: c.id, valorRecebidoCents: b.valorRecebidoCents || undefined });
+        if (SITUACOES_PAGAS.includes(b.situacao)) {
+          resultado.pagas.push({ chargeId: c.id, valorRecebidoCents: b.valorRecebidoCents || undefined });
+        } else if (SITUACOES_SEM_VALOR.includes(b.situacao)) {
+          await this.prisma.charge.update({
+            where: { id: c.id },
+            data: {
+              boletoCodigoSolicitacao: null,
+              linhaDigitavel: null,
+              pixCopiaECola: null,
+              boletoPdfBase64: null,
+              boletoErro: `Boleto ${b.situacao.toLowerCase()} no Inter (código ${c.boletoCodigoSolicitacao}) - o Pix e a linha digitável dele não funcionam mais.`,
+            },
+          });
+          resultado.cancelados.push(c.client.name);
+          this.logger.warn(`Cobrança ${c.id}: boleto ${c.boletoCodigoSolicitacao} está ${b.situacao} no Inter - desligado da cobrança.`);
+        } else if ((b.pixCopiaECola && b.pixCopiaECola !== c.pixCopiaECola) || (b.linhaDigitavel && b.linhaDigitavel !== c.linhaDigitavel)) {
+          await this.prisma.charge.update({
+            where: { id: c.id },
+            data: { pixCopiaECola: b.pixCopiaECola ?? c.pixCopiaECola, linhaDigitavel: b.linhaDigitavel ?? c.linhaDigitavel },
+          });
+          resultado.atualizados.push(c.client.name);
+        }
       } catch (error: any) {
         this.logger.warn(`Não foi possível consultar o boleto ${c.boletoCodigoSolicitacao} no Inter: ${error.message}`);
       }
     }
-    return pagas;
+    return resultado;
   }
+
 
   /**
    * ZIP com os PDFs dos boletos escolhidos (nome do arquivo como o agente:

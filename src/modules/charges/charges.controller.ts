@@ -52,6 +52,12 @@ export class ChargesController {
     return this.agendados.cancelar(id);
   }
 
+  /** Confere no Inter todos os boletos em aberto: pagos, cancelados e Pix/linha desatualizados. */
+  @Post('conferir-boletos')
+  conferirBoletos() {
+    return this.chargesService.conferirBoletos();
+  }
+
   /** Limpa os avisos de Com problema (sem telefone e falha de envio) sem apagar cobranças. */
   @Post('limpar-avisos')
   limparAvisos() {
