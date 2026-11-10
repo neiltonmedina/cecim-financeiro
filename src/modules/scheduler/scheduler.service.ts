@@ -10,6 +10,9 @@ import { ConversationsService } from '../conversations/conversations.service';
 import { telefonesDoCliente } from '../clients/telefones.util';
 import { LotesService } from '../charges/lotes.service';
 
+/** Depois da 3ª mensagem, os lembretes seguem até o pagamento, mas nunca mais perto que isto. */
+const DIAS_MINIMOS_APOS_TERCEIRA = 7;
+
 function startOfDay(date: Date): Date {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
@@ -55,16 +58,17 @@ export class SchedulerService {
 
   /**
    * Avança o fluxo de conversas do agente de cobrança que ficaram sem resposta:
-   * 1ª mensagem -> lembrete -> 3ª tentativa (oferece opções fechadas) -> encerra (sem spam).
-   * O intervalo entre cada contato é o definido no painel ao confirmar a campanha
-   * (Conversation.intervalDays). Nunca mexe em conversas escaladas para humano ou pausadas.
+   * 1ª mensagem -> lembrete -> 3ª tentativa, no intervalo definido no painel ao confirmar a
+   * campanha (Conversation.intervalDays). Depois disso os lembretes continuam, mais espaçados
+   * (no mínimo a cada 7 dias), até a cobrança ser paga ou cancelada - a régua só termina com o
+   * pagamento. Cliente que respondeu e não pagou também volta a ser lembrado. Só a pausa
+   * manual feita no painel interrompe.
    */
   private async advanceStaleConversations() {
     const conversations = await this.prisma.conversation.findMany({
       where: {
-        humanRequested: false,
         paused: false,
-        stage: { in: ['INICIADA', 'LEMBRETE_ENVIADO', 'TERCEIRA_TENTATIVA'] },
+        stage: { not: 'ENCERRADA' },
         client: { active: true },
       },
       include: { client: true, charge: { omit: { boletoPdfBase64: true } } },
@@ -91,25 +95,23 @@ export class SchedulerService {
           });
         }
       }
-      // Se o cliente respondeu depois do último envio, não é "sem resposta" - ignora.
-      if (conv.lastInboundAt && conv.lastInboundAt > (conv.lastOutboundAt ?? new Date(0))) continue;
       const telefones = telefonesDoCliente(conv.client);
       if (!telefones.length) continue;
       if (!conv.lastOutboundAt) continue;
 
-      const staleThreshold = new Date(conv.lastOutboundAt.getTime() + conv.intervalDays * 24 * 60 * 60 * 1000);
-      if (new Date() < staleThreshold) continue; // ainda dentro do intervalo configurado, aguarda
+      // Conta a partir do último contato, de qualquer lado: quem respondeu (e não pagou)
+      // também volta a ser lembrado depois do intervalo.
+      const ultimoContato = Math.max(conv.lastOutboundAt.getTime(), conv.lastInboundAt?.getTime() ?? 0);
+      // Nas 3 primeiras mensagens vale o intervalo da campanha; depois, no mínimo 7 dias.
+      const primeirasMensagens = conv.stage === 'INICIADA' || conv.stage === 'LEMBRETE_ENVIADO';
+      const dias = primeirasMensagens ? conv.intervalDays : Math.max(conv.intervalDays, DIAS_MINIMOS_APOS_TERCEIRA);
+      const staleThreshold = new Date(ultimoContato + dias * 24 * 60 * 60 * 1000);
+      if (new Date() < staleThreshold) continue; // ainda dentro do intervalo, aguarda
       // Já recebeu mensagem desta cobrança hoje (ex: lembrete do dia do vencimento): fica para o próximo dia.
       const enviadaHoje = await this.prisma.notificationLog.findFirst({
         where: { chargeId: conv.chargeId!, channel: 'WHATSAPP', queuedAt: { gte: new Date(Date.now() - 20 * 60 * 60 * 1000) } },
       });
       if (enviadaHoje) continue;
-
-      if (conv.stage === 'TERCEIRA_TENTATIVA') {
-        await this.prisma.conversation.update({ where: { id: conv.id }, data: { stage: 'ENCERRADA' } });
-        this.logger.log(`Conversa ${conv.id} encerrada por falta de resposta (evitando excesso de mensagens).`);
-        continue;
-      }
 
       const codigo = conv.charge.linhaDigitavel || conv.charge.pixCopiaECola;
       if (!codigo) {
@@ -117,7 +119,8 @@ export class SchedulerService {
         continue;
       }
 
-      const nextStage = conv.stage === 'INICIADA' ? 'LEMBRETE_ENVIADO' : 'TERCEIRA_TENTATIVA';
+      // Depois da 3ª mensagem (ou com o cliente já tendo respondido) a etapa não muda mais.
+      const nextStage = conv.stage === 'INICIADA' ? 'LEMBRETE_ENVIADO' : conv.stage === 'LEMBRETE_ENVIADO' ? 'TERCEIRA_TENTATIVA' : conv.stage;
 
       // Mesmo modelo do disparo: boleto ainda no prazo usa o "boleto a vencer" (se
       // aprovado/ativo); vencido usa o de cobrança. Sem modelo configurado, cobranca_cecim.

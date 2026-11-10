@@ -69,10 +69,35 @@ describe('SchedulerService - régua automática', () => {
     expect(prisma.conversation.update).toHaveBeenCalledWith({ where: { id: 'conv-1' }, data: { stage: 'ENCERRADA' } });
   });
 
-  it('não envia se o cliente respondeu depois do último contato', async () => {
+  it('cliente que respondeu há pouco: espera o intervalo a partir da resposta', async () => {
     const { service, whatsapp } = setup([makeConversation({ lastInboundAt: new Date(Date.now() - 1 * DIA) })]);
     await service.runDailyReminders();
     expect(whatsapp.send).not.toHaveBeenCalled();
+  });
+
+  it('cliente que respondeu e não pagou volta a ser lembrado depois do intervalo', async () => {
+    const { service, prisma, whatsapp } = setup([
+      makeConversation({ stage: 'AGUARDANDO_PAGAMENTO', lastInboundAt: new Date(Date.now() - 8 * DIA), lastOutboundAt: new Date(Date.now() - 8 * DIA) }),
+    ]);
+    await service.runDailyReminders();
+    expect(whatsapp.send).toHaveBeenCalledTimes(1);
+    expect(prisma.conversation.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ stage: 'AGUARDANDO_PAGAMENTO' }) }),
+    );
+  });
+
+  it('depois da 3ª mensagem não encerra: continua lembrando até pagar, no mínimo a cada 7 dias', async () => {
+    const cedo = setup([makeConversation({ stage: 'TERCEIRA_TENTATIVA', lastOutboundAt: new Date(Date.now() - 6 * DIA) })]);
+    await cedo.service.runDailyReminders();
+    expect(cedo.whatsapp.send).not.toHaveBeenCalled();
+    expect(cedo.prisma.conversation.update).not.toHaveBeenCalled();
+
+    const { service, prisma, whatsapp } = setup([makeConversation({ stage: 'TERCEIRA_TENTATIVA', lastOutboundAt: new Date(Date.now() - 8 * DIA) })]);
+    await service.runDailyReminders();
+    expect(whatsapp.send).toHaveBeenCalledTimes(1);
+    expect(prisma.conversation.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ stage: 'TERCEIRA_TENTATIVA' }) }),
+    );
   });
 
   it('recupera a data do primeiro envio de conversas antigas (sem lastOutboundAt) e envia o lembrete', async () => {

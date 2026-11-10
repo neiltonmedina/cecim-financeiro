@@ -149,6 +149,7 @@ export class BoletosService {
         where: { id: charge.id },
         data: {
           boletoCodigoSolicitacao: codigoSolicitacao,
+          boletoCriadoEm: new Date(),
           boletoPdfBase64: pdfBase64 ?? null,
           pixCopiaECola: pixCopiaECola ?? null,
           linhaDigitavel: linhaDigitavel ?? null,
@@ -543,6 +544,7 @@ export class BoletosService {
       where: { id: charge.id },
       data: {
         boletoCodigoSolicitacao: novo.codigoSolicitacao,
+        boletoCriadoEm: new Date(),
         boletoPdfBase64: novo.pdfBase64 ?? null, // sem PDF ainda: o link busca o novo no Inter
         pixCopiaECola: novo.pixCopiaECola ?? null,
         linhaDigitavel: novo.linhaDigitavel ?? null,

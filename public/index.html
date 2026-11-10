@@ -2290,6 +2290,15 @@ async function gerarBoletoCobranca(id, btn, reenviar = false, intervalDays, clie
   }
 }
 
+/** Boleto criado há poucos minutos: o servidor segura o envio até o Pix ficar ativo no banco. */
+function avisoBoletoNovo(result) {
+  const segurados = (result || []).filter((r) => r.agendadoPara);
+  if (!segurados.length) return '';
+  const hora = new Date(segurados[0].agendadoPara).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return `⏳ ${segurados.length} cobrança(s) com boleto criado agora há pouco: o envio sai sozinho às ${hora}, ` +
+    'quando o Pix já estiver ativo no banco. Não precisa disparar de novo (aparece em "Disparos agendados").';
+}
+
 /** Dispara de novo uma única cobrança (depois de corrigir o problema). */
 async function redispararCobranca(chargeId, semPerguntar, intervalDays) {
   if (!semPerguntar && !confirm('Enviar a cobrança pelo WhatsApp de novo agora?')) return;
@@ -2300,7 +2309,8 @@ async function redispararCobranca(chargeId, semPerguntar, intervalDays) {
       body: JSON.stringify({ chargeIds: [chargeId], channels: ['WHATSAPP'], ...(intervalDays ? { intervalDays } : {}), confirmado: true }),
     });
     const res = r[0];
-    alert(res?.channelsQueued?.length ? 'Cobrança enviada para a fila do WhatsApp. Em instantes ela chega ao cliente.'
+    alert(res?.agendadoPara ? avisoBoletoNovo(r)
+      : res?.channelsQueued?.length ? 'Cobrança enviada para a fila do WhatsApp. Em instantes ela chega ao cliente.'
       : 'Não foi enviada: ' + (res?.skipped?.join('; ') || 'motivo não informado'));
     loadCharges();
   } catch (e) {
@@ -2747,8 +2757,10 @@ async function confirmarCampanha() {
       }),
     });
     const enviadas = result.filter((r) => r.channelsQueued.length).length;
-    const puladas = result.filter((r) => !r.channelsQueued.length);
+    const puladas = result.filter((r) => !r.channelsQueued.length && !r.agendadoPara);
+    const segurados = avisoBoletoNovo(result);
     alert('Cobrança enviada pelo WhatsApp para ' + enviadas + ' cliente(s).' +
+      (segurados ? '\n\n' + segurados : '') +
       (puladas.length ? '\n\n' + puladas.length + ' não enviada(s): ' + [...new Set(puladas.flatMap((r) => r.skipped))].join('; ') : ''));
     loadCharges();
   } catch (e) {
@@ -2813,7 +2825,7 @@ async function loadAgendados(origem) {
     ${lista.map((d) => `<div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding-top:6px;">
       <span>${ROTULO[d.status] || d.status}</span>
       <span>${fmtDateTime(d.executarEm)}</span>
-      <span style="color:var(--muted);">${d.chargeIds.length} cobrança(s) · intervalo ${d.intervalDays} dia(s)${d.resultado ? ' · ' + escHtml(d.resultado) : ''}</span>
+      <span style="color:var(--muted);">${d.chargeIds.length} cobrança(s) ${d.intervalDays ? ` · intervalo ${d.intervalDays} dia(s)` : ' · aguardando o Pix do boleto novo ficar ativo'}${d.resultado ? ' · ' + escHtml(d.resultado) : ''}</span>
       ${d.status === 'AGENDADO' ? `<button class="secondary" style="padding:4px 10px; font-size:12px;" onclick="cancelarAgendado('${d.id}')">Cancelar</button>` : ''}
     </div>`).join('')}
   </div>`;

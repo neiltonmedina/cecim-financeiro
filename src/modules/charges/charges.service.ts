@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { ChargeStatus, TemplateType } from '@prisma/client';
+import { Channel, ChargeStatus, TemplateType } from '@prisma/client';
 import { telefonesDoCliente } from '../clients/telefones.util';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -9,6 +9,9 @@ import { CreateChargeDto } from './dto/create-charge.dto';
 import { CreateBulkChargesDto } from './dto/create-bulk-charges.dto';
 import { DispatchChargesDto } from './dto/dispatch-charges.dto';
 import { UpdateChargeDto } from './dto/update-charge.dto';
+
+/** Espera entre criar o boleto no Inter e enviá-lo ao cliente (tempo de o Pix ficar ativo). */
+export const ESPERA_BOLETO_NOVO_MS = 10 * 60 * 1000;
 
 @Injectable()
 export class ChargesService {
@@ -250,7 +253,7 @@ export class ChargesService {
    * Dispara (emite) a cobrança pelos canais habilitados — SMS, WhatsApp e
    * E-mail — para os clientes selecionados via IDs de cobrança.
    */
-  async dispatch(dto: DispatchChargesDto) {
+  async dispatch(dto: DispatchChargesDto, opcoes: { semEspera?: boolean } = {}) {
     if (!dto.confirmado) {
       throw new BadRequestException(
         'É necessário confirmar explicitamente a campanha (confirmado: true) antes de disparar - seleção manual é obrigatória.',
@@ -267,6 +270,29 @@ export class ChargesService {
       throw new BadRequestException(
         `Não é possível notificar cobranças pagas ou canceladas: ${invalid.map((c) => c.id).join(', ')}`,
       );
+    }
+
+    // Boleto criado há poucos minutos: o Pix ainda pode não estar ativo no banco
+    // ("QR Code expirou"). Em vez de enviar já, agenda sozinho para quando completar a espera.
+    const limite = Date.now() - ESPERA_BOLETO_NOVO_MS;
+    const recentes = opcoes.semEspera ? [] : charges.filter((c) => c.boletoCriadoEm && c.boletoCriadoEm.getTime() > limite);
+    if (recentes.length) {
+      const executarEm = new Date(Math.max(...recentes.map((c) => c.boletoCriadoEm!.getTime())) + ESPERA_BOLETO_NOVO_MS);
+      await this.prisma.disparoAgendado.create({
+        // intervalDays 0 = mantém o intervalo que a régua do cliente já tinha.
+        data: { chargeIds: recentes.map((c) => c.id), intervalDays: dto.intervalDays ?? 0, executarEm, criadoPor: 'boleto recém-criado' },
+      });
+      const segurados = recentes.map((c) => ({
+        chargeId: c.id,
+        clientId: c.clientId,
+        channelsQueued: [] as Channel[],
+        skipped: [] as string[],
+        agendadoPara: executarEm.toISOString(),
+      }));
+      const idsRecentes = new Set(recentes.map((c) => c.id));
+      const demais = dto.chargeIds.filter((id) => !idsRecentes.has(id));
+      if (!demais.length) return segurados;
+      return [...segurados, ...(await this.dispatch({ ...dto, chargeIds: demais }, { semEspera: true }))];
     }
 
     // Completa a linha digitável de cobranças antigas que ainda não a tinham salva,

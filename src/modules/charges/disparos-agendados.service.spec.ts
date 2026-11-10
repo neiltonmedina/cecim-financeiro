@@ -19,7 +19,7 @@ describe('DisparosAgendadosService.executarPendentes', () => {
   it('dispara só as cobranças ainda em aberto e avisa no celular', async () => {
     const { service, prisma, charges, push } = setup();
     expect(await service.executarPendentes()).toBe(1);
-    expect(charges.dispatch).toHaveBeenCalledWith({ chargeIds: ['c1'], channels: ['WHATSAPP'], intervalDays: 5, confirmado: true });
+    expect(charges.dispatch).toHaveBeenCalledWith({ chargeIds: ['c1'], channels: ['WHATSAPP'], intervalDays: 5, confirmado: true }, { semEspera: true });
     expect(prisma.disparoAgendado.update.mock.calls[0][0].data).toMatchObject({ status: 'EXECUTADO', resultado: expect.stringContaining('1 enviada(s); 1 já paga') });
     expect(push.notificar).toHaveBeenCalled();
   });

@@ -57,7 +57,11 @@ export class DisparosAgendadosService {
           select: { id: true },
         });
         const result = abertas.length
-          ? await this.charges.dispatch({ chargeIds: abertas.map((c) => c.id), channels: ['WHATSAPP'], intervalDays: d.intervalDays, confirmado: true })
+          ? await this.charges.dispatch(
+              // intervalDays 0 (disparo segurado por boleto recém-criado): mantém o intervalo da régua.
+              { chargeIds: abertas.map((c) => c.id), channels: ['WHATSAPP'], ...(d.intervalDays > 0 ? { intervalDays: d.intervalDays } : {}), confirmado: true },
+              { semEspera: true },
+            )
           : [];
         const enviadas = result.filter((r) => r.channelsQueued.length).length;
         const resumo = `${enviadas} enviada(s); ${d.chargeIds.length - abertas.length} já paga(s)/cancelada(s); ${result.length - enviadas} não enviada(s).`;

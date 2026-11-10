@@ -100,6 +100,9 @@ model Charge {
   // nesse caso não regeramos o boleto (Inter não aceita data passada), então
   // o boleto real continua com a data antiga.
   boletoDataVencimento    DateTime?
+  // Quando o boleto foi criado no Inter por aqui: o Pix leva alguns minutos para ficar
+  // ativo, então o disparo de boleto recém-criado é segurado (ver ChargesService.dispatch).
+  boletoCriadoEm          DateTime?
   // De onde veio a cobrança: PAINEL (criada aqui, boleto gerado por nós) ou
   // INTER (boleto já existente no Inter, importado sem gerar boleto novo).
   origem                  String  @default("PAINEL")
@@ -211,7 +214,7 @@ enum ConversationStage {
   NEGOCIACAO            // cliente pediu negociação, em andamento
   AGUARDANDO_PAGAMENTO  // cliente avisou que vai pagar / já pagou, aguardando confirmação
   AGUARDANDO_HUMANO     // escalado, automação pausada
-  ENCERRADA             // fim do fluxo automático (sem resposta após 3 tentativas, ou resolvido)
+  ENCERRADA             // fim do fluxo automático (cobrança paga ou cancelada)
 }
 
 enum MessageDirection {

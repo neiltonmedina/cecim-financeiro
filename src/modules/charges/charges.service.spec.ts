@@ -69,3 +69,46 @@ describe('ChargesService.limparAvisos', () => {
     expect(r.map((c) => c.id)).toEqual(['nova']);
   });
 });
+
+describe('ChargesService.dispatch - boleto recém-criado', () => {
+  function setup(charges: any[]) {
+    const prisma: any = {
+      charge: {
+        findMany: jest.fn(async ({ where }: any) => charges.filter((c) => where.id.in.includes(c.id))),
+        findUnique: jest.fn(async ({ where }: any) => charges.find((c) => c.id === where.id)),
+      },
+      client: { findMany: jest.fn().mockResolvedValue([]) },
+      disparoAgendado: { create: jest.fn() },
+    };
+    const notifications: any = {
+      dispatchCharges: jest.fn(async (ids: string[]) => ids.map((chargeId) => ({ chargeId, clientId: 'cli', channelsQueued: ['WHATSAPP'], skipped: [] }))),
+    };
+    const boletos: any = { isConfigured: () => false };
+    return { service: new ChargesService(prisma, notifications, {} as any, boletos), prisma, notifications };
+  }
+  const cobranca = (id: string, minutosDoBoleto: number | null) => ({
+    id, clientId: 'cli', status: 'PENDENTE', linhaDigitavel: '0779',
+    boletoCriadoEm: minutosDoBoleto === null ? null : new Date(Date.now() - minutosDoBoleto * 60 * 1000),
+  });
+
+  it('segura o boleto criado há menos de 10 min (agenda sozinho) e envia os demais na hora', async () => {
+    const { service, prisma, notifications } = setup([cobranca('novo', 2), cobranca('antigo', 60), cobranca('importado', null)]);
+
+    const r: any[] = await service.dispatch({ chargeIds: ['novo', 'antigo', 'importado'], channels: ['WHATSAPP'], intervalDays: 5, confirmado: true } as any);
+
+    const agendado = prisma.disparoAgendado.create.mock.calls[0][0].data;
+    expect(agendado).toMatchObject({ chargeIds: ['novo'], intervalDays: 5 });
+    // Sai quando o boleto completar 10 min (faltam ~8).
+    expect(Math.round((agendado.executarEm.getTime() - Date.now()) / 60000)).toBe(8);
+    expect(notifications.dispatchCharges.mock.calls[0][0]).toEqual(['antigo', 'importado']);
+    expect(r.find((x) => x.chargeId === 'novo')).toMatchObject({ channelsQueued: [], agendadoPara: agendado.executarEm.toISOString() });
+    expect(r.filter((x) => x.channelsQueued.length).map((x) => x.chargeId)).toEqual(['antigo', 'importado']);
+  });
+
+  it('na hora marcada (semEspera) envia sem agendar de novo', async () => {
+    const { service, prisma, notifications } = setup([cobranca('novo', 2)]);
+    await service.dispatch({ chargeIds: ['novo'], channels: ['WHATSAPP'], confirmado: true } as any, { semEspera: true });
+    expect(prisma.disparoAgendado.create).not.toHaveBeenCalled();
+    expect(notifications.dispatchCharges).toHaveBeenCalled();
+  });
+});
