@@ -90,10 +90,23 @@ export class BoletosController {
   /**
    * Endpoint público (sem login) para o cliente abrir/baixar o PDF do boleto
    * a partir do link enviado por WhatsApp/SMS/E-mail. O ID da cobrança (UUID)
-   * já funciona como um token não-adivinhável.
+   * já funciona como um token não-adivinhável. O link deixa de abrir o boleto
+   * quando a cobrança é paga ou cancelada (os dados do cliente não ficam
+   * expostos para sempre); pelo painel, o PDF continua disponível no ZIP.
    */
   @Get(':chargeId')
   async download(@Param('chargeId') chargeId: string, @Res() res: Response) {
+    const cobranca = await this.prisma.charge.findUnique({ where: { id: chargeId }, select: { status: true } }).catch(() => null);
+    if (cobranca?.status === 'PAGA' || cobranca?.status === 'CANCELADA') {
+      const texto = cobranca.status === 'PAGA'
+        ? 'Este boleto já foi pago. Obrigado!'
+        : 'Este boleto foi cancelado e não precisa ser pago.';
+      res.status(410).set('Content-Type', 'text/html; charset=utf-8').send(
+        `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Boleto indisponível</title></head>` +
+        `<body style="font-family:Arial,Helvetica,sans-serif;max-width:480px;margin:60px auto;padding:0 20px;text-align:center;color:#222;"><h2>${texto}</h2><p>CECIM Assessoria Contábil</p></body></html>`,
+      );
+      return;
+    }
     const pdf = await this.boletosService.pdfDaCobranca(chargeId);
     if (!pdf) {
       throw new NotFoundException('Boleto não encontrado ou ainda não gerado.');

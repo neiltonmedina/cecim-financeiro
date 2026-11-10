@@ -26,6 +26,8 @@ async function bootstrap() {
     }),
   );
 
+  // Mapa técnico da API: fechado em produção (só abre com DOCS_ENABLED=true no ambiente).
+  const docsAbertos = process.env.NODE_ENV !== 'production' || process.env.DOCS_ENABLED === 'true';
   const config = new DocumentBuilder()
     .setTitle('CECIM - Financeiro | Cobrança Multicanal')
     .setDescription('API para emissão de cobranças por SMS, WhatsApp e E-mail para clientes selecionados')
@@ -33,11 +35,11 @@ async function bootstrap() {
     .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('docs', app, document);
+  if (docsAbertos) SwaggerModule.setup('docs', app, document);
 
   const port = process.env.PORT ? Number(process.env.PORT) : 3000;
   await app.listen(port);
   // eslint-disable-next-line no-console
-  console.log(`Aplicação de cobrança rodando na porta ${port}. Documentação em /docs`);
+  console.log(`Aplicação de cobrança rodando na porta ${port}.${docsAbertos ? ' Documentação em /docs' : ''}`);
 }
 bootstrap();
