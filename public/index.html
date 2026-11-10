@@ -2198,6 +2198,13 @@ async function loadCharges(origem = chargesOrigem) {
       const vencimentoCell = divergeBoleto
         ? `${fmtDate(c.dueDate)} <span title="O boleto real no Inter continua vencendo em ${fmtDate(c.boletoDataVencimento)} - a data aqui foi alterada manualmente e não pôde ser regenerada no banco." style="color:#d97706; cursor:help;">⚠️</span>`
         : fmtDate(c.dueDate);
+      // Régua parada: já foi enviada, não foi paga e não há mais lembretes automáticos em andamento.
+      const reguaParada = !disabled && (c.notifications || []).length && !(c.conversations || []).some((v) => v.stage !== 'ENCERRADA');
+      const botaoRecomecar = reguaParada
+        ? `<div style="margin-top:4px;"><span style="font-size:11.5px; color:var(--muted);">lembretes parados</span>
+            <button class="secondary" style="padding:3px 8px; font-size:12px; margin-left:4px;" title="Envia a cobrança de novo e recomeça os lembretes automáticos, sem criar outra cobrança"
+              onclick="recomecarCobranca('${c.id}', '${argJs(c.client?.name)}', ${c.conversations?.[0]?.intervalDays || 5})">🔁 Recomeçar cobrança</button></div>`
+        : '';
       html += `<tr>
         <td><input type="checkbox" ${disabled} onchange="toggleChargeSelection('${c.id}', this.checked)" /></td>
         ${comPdf ? `<td style="white-space:nowrap;"><input type="checkbox" class="pdf-sel" data-id="${c.id}" ${c.boletoCodigoSolicitacao ? '' : 'disabled title="Sem boleto gerado"'} onchange="atualizarContagemPdf()" />${c.boletoCodigoSolicitacao ? ` <a href="/boletos/${c.id}" target="_blank" title="Abrir o PDF" style="text-decoration:none;">📄</a>` : ''}</td>` : ''}
@@ -2207,7 +2214,7 @@ async function loadCharges(origem = chargesOrigem) {
         <td>${fmtMoney(c.amountCents)}</td>
         <td>${vencimentoCell}</td>
         <td style="white-space:nowrap;"><span class="badge ${c.status}">${c.status}</span>${iconeEnvio(c)}${c.notifications?.[0]?.status === 'FAILED'
-          ? `<div style="font-size:11.5px; color:var(--red); white-space:normal; max-width:220px; margin-top:4px; cursor:pointer;" onclick="mostrarErroEnvio('${c.id}')">${explicarErroEnvio(c.notifications[0].errorMessage, !semBoleto).split(':')[0].split('.')[0]}</div>` : ''}</td>
+          ? `<div style="font-size:11.5px; color:var(--red); white-space:normal; max-width:220px; margin-top:4px; cursor:pointer;" onclick="mostrarErroEnvio('${c.id}')">${explicarErroEnvio(c.notifications[0].errorMessage, !semBoleto).split(':')[0].split('.')[0]}</div>` : ''}${botaoRecomecar}</td>
       </tr>`;
     }
     html += '</tbody></table>';
@@ -2297,6 +2304,15 @@ function avisoBoletoNovo(result) {
   const hora = new Date(segurados[0].agendadoPara).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   return `⏳ ${segurados.length} cobrança(s) com boleto criado agora há pouco: o envio sai sozinho às ${hora}, ` +
     'quando o Pix já estiver ativo no banco. Não precisa disparar de novo (aparece em "Disparos agendados").';
+}
+
+/** Cobrança com os lembretes parados: envia de novo e a régua recomeça do início (mesma cobrança, mesmo boleto). */
+async function recomecarCobranca(chargeId, nome, intervaloAnterior) {
+  const digitado = prompt(`Recomeçar a cobrança de ${nome}?\n\nA mensagem é enviada de novo agora e os lembretes automáticos voltam, até o cliente pagar.\n\nIntervalo entre os lembretes (dias):`, intervaloAnterior);
+  if (digitado === null) return;
+  const intervalDays = Number(digitado);
+  if (!Number.isInteger(intervalDays) || intervalDays < 1) { alert('Informe um número de dias válido (ex: 5).'); return; }
+  await redispararCobranca(chargeId, true, intervalDays);
 }
 
 /** Dispara de novo uma única cobrança (depois de corrigir o problema). */

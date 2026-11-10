@@ -72,7 +72,12 @@ export class ChargesService {
       // Últimos envios de WhatsApp: o painel mostra alerta quando o último falhou
       // e ✓✓ quando foi entregue/lido (vários telefones da empresa = vários envios).
       omit: { boletoPdfBase64: true },
-      include: { client: true, notifications: { where: { channel: 'WHATSAPP' }, orderBy: { queuedAt: 'desc' }, take: 10 } },
+      include: {
+        client: true,
+        notifications: { where: { channel: 'WHATSAPP' }, orderBy: { queuedAt: 'desc' }, take: 10 },
+        // Régua de lembretes: o painel mostra "Recomeçar cobrança" quando ela está parada (encerrada).
+        conversations: { select: { stage: true, paused: true, intervalDays: true }, orderBy: { createdAt: 'desc' } },
+      },
       orderBy: { dueDate: 'asc' },
     });
   }
