@@ -432,7 +432,9 @@
             <option value="VENCIDA">Vencida</option>
             <option value="CANCELADA">Cancelada</option>
           </select>
+          <input type="search" id="charge-busca-PAINEL" placeholder="🔍 Pesquisar cliente, telefone, valor..." oninput="filtrarCobrancas('PAINEL')" style="min-width:250px; flex:1; max-width:380px;" autocomplete="off" />
           <button class="secondary" onclick="loadCharges('PAINEL')">Atualizar</button>
+          <span id="charge-busca-contagem-PAINEL" style="font-size:12.5px; color:var(--muted);"></span>
         </div>
 
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px; padding:10px 12px; background:var(--accent-soft); border-radius:10px; flex-wrap:wrap;">
@@ -480,7 +482,9 @@
             <option value="VENCIDA">Vencida</option>
             <option value="CANCELADA">Cancelada</option>
           </select>
+          <input type="search" id="charge-busca-MENSAL" placeholder="🔍 Pesquisar cliente, telefone, valor..." oninput="filtrarCobrancas('MENSAL')" style="min-width:250px; flex:1; max-width:380px;" autocomplete="off" />
           <button class="secondary" onclick="loadCharges('MENSAL')">Atualizar</button>
+          <span id="charge-busca-contagem-MENSAL" style="font-size:12.5px; color:var(--muted);"></span>
         </div>
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px; padding:10px 12px; background:var(--accent-soft); border-radius:10px; flex-wrap:wrap;">
           <strong class="campaign-count" style="font-size:13px;">0 selecionada(s)</strong>
@@ -545,7 +549,9 @@
             <option value="VENCIDA">Vencida</option>
             <option value="CANCELADA">Cancelada</option>
           </select>
+          <input type="search" id="charge-busca-INTER" placeholder="🔍 Pesquisar cliente, telefone, valor..." oninput="filtrarCobrancas('INTER')" style="min-width:250px; flex:1; max-width:380px;" autocomplete="off" />
           <button class="secondary" onclick="loadCharges('INTER')">Atualizar</button>
+          <span id="charge-busca-contagem-INTER" style="font-size:12.5px; color:var(--muted);"></span>
         </div>
 
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px; padding:10px 12px; background:var(--accent-soft); border-radius:10px; flex-wrap:wrap;">
@@ -2219,6 +2225,7 @@ async function loadCharges(origem = chargesOrigem) {
     }
     html += '</tbody></table>';
     el.innerHTML = html;
+    filtrarCobrancas(origem); // mantém a pesquisa digitada depois de atualizar a lista
     ultimosEnvios = Object.fromEntries(charges.map((c) => [c.id, {
       cliente: c.client?.name, envio: c.notifications?.[0], notificacoes: c.notifications, clientId: c.clientId,
       telefone: c.client?.phoneE164, temBoleto: !!(c.linhaDigitavel || c.pixCopiaECola),
@@ -2226,6 +2233,28 @@ async function loadCharges(origem = chargesOrigem) {
   } catch (e) {
     el.innerHTML = '<div class="empty">' + e.message + '</div>';
   }
+}
+
+/** Pesquisa na lista de cobranças (nome, telefone, descrição, valor, vencimento, status), sem recarregar. */
+function filtrarCobrancas(origem) {
+  const campo = document.getElementById('charge-busca-' + origem);
+  const contagem = document.getElementById('charge-busca-contagem-' + origem);
+  const el = document.getElementById('charges-content-' + origem);
+  if (!campo || !el) return;
+  const normaliza = (t) => String(t ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const termos = normaliza(campo.value).split(/\s+/).filter(Boolean);
+  const linhas = [...el.querySelectorAll('tbody tr')];
+  let visiveis = 0;
+  for (const tr of linhas) {
+    const texto = normaliza(tr.innerText);
+    const ok = termos.every((t) => texto.includes(t));
+    tr.style.display = ok ? '' : 'none';
+    if (ok) { visiveis++; continue; }
+    // Linha escondida não pode ficar selecionada: o disparo iria para quem você nem está vendo.
+    const caixa = tr.querySelector('input[type=checkbox]');
+    if (caixa && caixa.checked) { caixa.checked = false; const m = /toggleChargeSelection\('([^']+)'/.exec(caixa.getAttribute('onchange') || ''); if (m) toggleChargeSelection(m[1], false); }
+  }
+  if (contagem) contagem.textContent = termos.length ? visiveis + ' de ' + linhas.length + ' encontrada(s)' : '';
 }
 
 /** Corrige o WhatsApp do cliente direto na lista de cobranças. */
