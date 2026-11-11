@@ -2211,8 +2211,8 @@ async function loadCharges(origem = chargesOrigem) {
       const reguaParada = !disabled && (c.notifications || []).length && !(c.conversations || []).some((v) => v.stage !== 'ENCERRADA');
       const botaoRecomecar = reguaParada
         ? `<div style="margin-top:4px;"><span style="font-size:11.5px; color:var(--muted);">lembretes parados</span>
-            <button class="secondary" style="padding:3px 8px; font-size:12px; margin-left:4px;" title="Envia a cobrança de novo e recomeça os lembretes automáticos, sem criar outra cobrança"
-              onclick="recomecarCobranca('${c.id}', '${argJs(c.client?.name)}', ${c.conversations?.[0]?.intervalDays || 5})">🔁 Recomeçar cobrança</button></div>`
+            <button class="secondary" style="padding:3px 8px; font-size:14px; margin-left:4px;" title="Recomeçar a cobrança: envia de novo e recomeça os lembretes automáticos, sem criar outra cobrança" aria-label="Recomeçar a cobrança"
+              onclick="recomecarCobranca('${c.id}', '${argJs(c.client?.name)}', ${c.conversations?.[0]?.intervalDays || 5})">🔁</button></div>`
         : '';
       html += `<tr>
         <td><input type="checkbox" ${disabled} ${reguaParada ? 'data-parada="1"' : ''} onchange="toggleChargeSelection('${c.id}', this.checked)" /></td>
@@ -2370,6 +2370,7 @@ async function redispararCobranca(chargeId, semPerguntar, intervalDays) {
       : res?.channelsQueued?.length ? 'Cobrança enviada para a fila do WhatsApp. Em instantes ela chega ao cliente.'
       : 'Não foi enviada: ' + (res?.skipped?.join('; ') || 'motivo não informado'));
     loadCharges();
+    if (abaAtual === 'conversations') loadConversations();
   } catch (e) {
     alert('Erro ao enviar: ' + e.message);
   }
@@ -2909,14 +2910,23 @@ async function loadConversations() {
       el.innerHTML = '<div class="empty">Nenhuma conversa encontrada ainda.</div>';
       return;
     }
-    let html = '<table><thead><tr><th>Cliente</th><th>Cobrança</th><th>Estágio</th><th>Atenção</th><th>Última atualização</th></tr></thead><tbody>';
+    // Conversa parada = encerrada, sem outra conversa aberta para a mesma cobrança, e a cobrança segue sem pagar.
+    const abertas = new Set(conversations.filter((v) => v.stage !== 'ENCERRADA' && v.chargeId).map((v) => v.chargeId));
+    const jaMostrada = new Set();
+    let html = '<table><thead><tr><th>Cliente</th><th>Cobrança</th><th>Estágio</th><th>Atenção</th><th>Última atualização</th><th></th></tr></thead><tbody>';
     for (const c of conversations) {
+      const ch = c.charge;
+      const parada = c.stage === 'ENCERRADA' && ch && !['PAGA', 'CANCELADA'].includes(ch.status) && (ch.linhaDigitavel || ch.pixCopiaECola)
+        && c.client?.active !== false && c.client?.phoneE164 && !abertas.has(c.chargeId) && !jaMostrada.has(c.chargeId);
+      if (parada) jaMostrada.add(c.chargeId);
       html += `<tr class="clickable" onclick="openConversation('${c.id}')">
         <td>${escHtml(c.client?.name ?? '-')}</td>
         <td>${escHtml(c.charge?.description ?? '-')}</td>
         <td><span class="badge ${c.stage}">${c.stage.replaceAll('_', ' ')}</span></td>
         <td>${c.humanRequested ? '<span class="human-flag">⚠ precisa de humano</span>' : (c.paused ? '<span class="human-flag">⏸ pausada</span>' : '-')}</td>
         <td>${fmtDateTime(c.updatedAt)}</td>
+        <td>${parada ? `<button class="secondary" style="padding:3px 8px; font-size:14px;" title="Recomeçar a cobrança: envia de novo e recomeça os lembretes automáticos, sem criar outra cobrança" aria-label="Recomeçar a cobrança"
+          onclick="event.stopPropagation(); recomecarCobranca('${c.chargeId}', '${argJs(c.client?.name)}', ${c.intervalDays || 5})">🔁</button>` : ''}</td>
       </tr>`;
     }
     html += '</tbody></table>';
