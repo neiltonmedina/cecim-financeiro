@@ -434,6 +434,7 @@
           </select>
           <input type="search" id="charge-busca-PAINEL" placeholder="🔍 Pesquisar cliente, telefone, valor..." oninput="filtrarCobrancas('PAINEL')" style="min-width:250px; flex:1; max-width:380px;" autocomplete="off" />
           <button class="secondary" onclick="loadCharges('PAINEL')">Atualizar</button>
+          <button class="secondary" onclick="selecionarParadas('PAINEL')" title="Marca as cobranças em aberto cujos lembretes pararam. Depois é só confirmar o disparo aqui embaixo.">🔁 Selecionar as paradas</button>
           <span id="charge-busca-contagem-PAINEL" style="font-size:12.5px; color:var(--muted);"></span>
         </div>
 
@@ -484,6 +485,7 @@
           </select>
           <input type="search" id="charge-busca-MENSAL" placeholder="🔍 Pesquisar cliente, telefone, valor..." oninput="filtrarCobrancas('MENSAL')" style="min-width:250px; flex:1; max-width:380px;" autocomplete="off" />
           <button class="secondary" onclick="loadCharges('MENSAL')">Atualizar</button>
+          <button class="secondary" onclick="selecionarParadas('MENSAL')" title="Marca as cobranças em aberto cujos lembretes pararam. Depois é só confirmar o disparo aqui embaixo.">🔁 Selecionar as paradas</button>
           <span id="charge-busca-contagem-MENSAL" style="font-size:12.5px; color:var(--muted);"></span>
         </div>
         <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px; padding:10px 12px; background:var(--accent-soft); border-radius:10px; flex-wrap:wrap;">
@@ -551,6 +553,7 @@
           </select>
           <input type="search" id="charge-busca-INTER" placeholder="🔍 Pesquisar cliente, telefone, valor..." oninput="filtrarCobrancas('INTER')" style="min-width:250px; flex:1; max-width:380px;" autocomplete="off" />
           <button class="secondary" onclick="loadCharges('INTER')">Atualizar</button>
+          <button class="secondary" onclick="selecionarParadas('INTER')" title="Marca as cobranças em aberto cujos lembretes pararam. Depois é só confirmar o disparo aqui embaixo.">🔁 Selecionar as paradas</button>
           <span id="charge-busca-contagem-INTER" style="font-size:12.5px; color:var(--muted);"></span>
         </div>
 
@@ -2212,7 +2215,7 @@ async function loadCharges(origem = chargesOrigem) {
               onclick="recomecarCobranca('${c.id}', '${argJs(c.client?.name)}', ${c.conversations?.[0]?.intervalDays || 5})">🔁 Recomeçar cobrança</button></div>`
         : '';
       html += `<tr>
-        <td><input type="checkbox" ${disabled} onchange="toggleChargeSelection('${c.id}', this.checked)" /></td>
+        <td><input type="checkbox" ${disabled} ${reguaParada ? 'data-parada="1"' : ''} onchange="toggleChargeSelection('${c.id}', this.checked)" /></td>
         ${comPdf ? `<td style="white-space:nowrap;"><input type="checkbox" class="pdf-sel" data-id="${c.id}" ${c.boletoCodigoSolicitacao ? '' : 'disabled title="Sem boleto gerado"'} onchange="atualizarContagemPdf()" />${c.boletoCodigoSolicitacao ? ` <a href="/boletos/${c.id}" target="_blank" title="Abrir o PDF" style="text-decoration:none;">📄</a>` : ''}</td>` : ''}
         <td>${escHtml(c.client?.name ?? '-')}${avisoBoleto}</td>
         <td>${telefoneCell}</td>
@@ -2255,6 +2258,15 @@ function filtrarCobrancas(origem) {
     if (caixa && caixa.checked) { caixa.checked = false; const m = /toggleChargeSelection\('([^']+)'/.exec(caixa.getAttribute('onchange') || ''); if (m) toggleChargeSelection(m[1], false); }
   }
   if (contagem) contagem.textContent = termos.length ? visiveis + ' de ' + linhas.length + ' encontrada(s)' : '';
+}
+
+/** Marca (só marca, não envia nada) as cobranças com lembretes parados que estão visíveis na lista. */
+function selecionarParadas(origem) {
+  const el = document.getElementById('charges-content-' + origem);
+  const caixas = [...el.querySelectorAll('input[data-parada="1"]:not(:disabled)')].filter((c) => c.closest('tr').style.display !== 'none');
+  if (!caixas.length) { alert('Nenhuma cobrança com os lembretes parados nesta lista.'); return; }
+  for (const c of caixas) { c.checked = true; const m = /toggleChargeSelection\('([^']+)'/.exec(c.getAttribute('onchange') || ''); if (m) toggleChargeSelection(m[1], true); }
+  alert(caixas.length + ' cobrança(s) com lembretes parados selecionada(s).\n\nConfira a lista e clique em "Confirmar e disparar" para recomeçar a cobrança de todas (mesma cobrança, sem criar outra). Nada é enviado antes disso.');
 }
 
 /** Corrige o WhatsApp do cliente direto na lista de cobranças. */
