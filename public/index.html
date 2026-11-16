@@ -2219,7 +2219,7 @@ async function loadCharges(origem = chargesOrigem) {
         ${comPdf ? `<td style="white-space:nowrap;"><input type="checkbox" class="pdf-sel" data-id="${c.id}" ${c.boletoCodigoSolicitacao ? '' : 'disabled title="Sem boleto gerado"'} onchange="atualizarContagemPdf()" />${c.boletoCodigoSolicitacao ? ` <a href="/boletos/${c.id}" target="_blank" title="Abrir o PDF" style="text-decoration:none;">📄</a>` : ''}</td>` : ''}
         <td>${escHtml(c.client?.name ?? '-')}${avisoBoleto}</td>
         <td>${telefoneCell}</td>
-        <td>${escHtml(c.description)}</td>
+        <td>${escHtml(c.description)}${origem !== 'MENSAL' && c.status !== 'CANCELADA' ? `<div style="margin-top:4px;"><button class="secondary" style="padding:3px 8px; font-size:12px;" title="Mostra esta cobrança na lista Boletos do mês (não gera boleto novo e não envia nada)" onclick="moverParaMensal('${c.id}', '${argJs(c.client?.name)}')">📅 Levar p/ Boletos do mês</button></div>` : ''}</td>
         <td>${fmtMoney(c.amountCents)}</td>
         <td>${vencimentoCell}</td>
         <td style="white-space:nowrap;"><span class="badge ${c.status}">${c.status}</span>${iconeEnvio(c)}${c.notifications?.[0]?.status === 'FAILED'
@@ -2267,6 +2267,18 @@ function selecionarParadas(origem) {
   if (!caixas.length) { alert('Nenhuma cobrança com os lembretes parados nesta lista.'); return; }
   for (const c of caixas) { c.checked = true; const m = /toggleChargeSelection\('([^']+)'/.exec(c.getAttribute('onchange') || ''); if (m) toggleChargeSelection(m[1], true); }
   alert(caixas.length + ' cobrança(s) com lembretes parados selecionada(s).\n\nConfira a lista e clique em "Confirmar e disparar" para recomeçar a cobrança de todas (mesma cobrança, sem criar outra). Nada é enviado antes disso.');
+}
+
+/** Leva uma cobrança importada do Inter (ou criada à mão) para a lista Boletos do mês. */
+async function moverParaMensal(chargeId, nome) {
+  if (!confirm(`Levar a cobrança de ${nome} para "Boletos do mês"?\n\nO boleto continua o mesmo: nada é gerado e nada é enviado.`)) return;
+  try {
+    await api('/charges/' + chargeId + '/mover-mensal', { method: 'PATCH' });
+    alert(`Pronto: a cobrança de ${nome} agora está em "Boletos do mês".`);
+    loadCharges();
+  } catch (e) {
+    alert('Não foi possível mover: ' + e.message);
+  }
 }
 
 /** Corrige o WhatsApp do cliente direto na lista de cobranças. */

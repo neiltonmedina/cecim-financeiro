@@ -137,7 +137,7 @@ export class LotesService {
   private jaGerado(clientId: string, vencimento: string, valorCents: number) {
     return this.prisma.charge.findFirst({
       where: { clientId, dueDate: new Date(`${vencimento}T00:00:00.000Z`), amountCents: valorCents, status: { not: 'CANCELADA' } },
-      select: { id: true, boletoCodigoSolicitacao: true },
+      select: { id: true, boletoCodigoSolicitacao: true, loteId: true, seuNumero: true },
     });
   }
 
@@ -198,6 +198,14 @@ export class LotesService {
     }
 
     const existente = await this.jaGerado(cliente.id, l.vencimento!, l.valorCents!);
+    if (existente && !existente.loteId) {
+      // Cobrança deste mês criada por outro caminho (importada do Inter ou feita à mão):
+      // passa a fazer parte dos Boletos do mês, em vez de ficar escondida em outra lista.
+      await this.prisma.charge.update({
+        where: { id: existente.id },
+        data: { loteId, origem: 'MENSAL', seuNumero: existente.seuNumero ?? (l.seuNumero || null) },
+      });
+    }
     if (existente?.boletoCodigoSolicitacao) return { status: 'JA_GERADO', chargeId: existente.id, cliente: cliente.name };
     if (existente) {
       // Cobrança já criada, mas o boleto falhou: recupera o que já existe no Inter ou gera (nunca duplica).

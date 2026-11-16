@@ -33,7 +33,7 @@ describe('LotesService.gerarLinha - sem boleto duplicado', () => {
     const prisma: any = {
       loteMensal: { findUnique: jest.fn().mockResolvedValue({ id: 'L1', mes: '2099-11' }) },
       client: { findMany: jest.fn().mockResolvedValue([{ id: 'cli', name: 'ELIO', document: '04301559000102', cep: '1', endereco: 'r', bairro: 'b', cidade: 'c', uf: 'PA', phoneE164: '+559499', telefonesExtras: [] }]) },
-      charge: { findFirst: jest.fn().mockResolvedValue(existente), create: jest.fn().mockResolvedValue({ id: 'nova' }) },
+      charge: { findFirst: jest.fn().mockResolvedValue(existente), create: jest.fn().mockResolvedValue({ id: 'nova' }), update: jest.fn() },
     };
     const boletos: any = { gerarBoletoParaCobranca: jest.fn().mockResolvedValue({ id: 'nova', boletoCodigoSolicitacao: 'cod' }) };
     return { service: new LotesService(prisma, boletos, {} as any, {} as any), prisma, boletos };
@@ -54,6 +54,17 @@ describe('LotesService.gerarLinha - sem boleto duplicado', () => {
     expect(prisma.charge.create).not.toHaveBeenCalled();
     expect(boletos.gerarBoletoParaCobranca).not.toHaveBeenCalled();
   });
+  it('cobrança do mês importada do Inter (fora da planilha) passa para os Boletos do mês', async () => {
+    const { service, prisma } = setup({ id: 'importada', boletoCodigoSolicitacao: 'cod', loteId: null, seuNumero: null });
+    expect(await service.gerarLinha('L1', ELIO)).toMatchObject({ status: 'JA_GERADO', chargeId: 'importada' });
+    expect(prisma.charge.update).toHaveBeenCalledWith({ where: { id: 'importada' }, data: { loteId: 'L1', origem: 'MENSAL', seuNumero: 'BOL-002' } });
+  });
+
+  it('cobrança que já está numa planilha do mês não muda de planilha', async () => {
+    const { service, prisma } = setup({ id: 'antiga', boletoCodigoSolicitacao: 'cod', loteId: 'L0' });
+    await service.gerarLinha('L1', ELIO);
+    expect(prisma.charge.update).not.toHaveBeenCalled();
+  });
 });
 
 describe('LotesService.gerarLinha - cobrança já criada mas sem boleto', () => {
@@ -61,7 +72,7 @@ describe('LotesService.gerarLinha - cobrança já criada mas sem boleto', () => 
     const prisma: any = {
       loteMensal: { findUnique: jest.fn().mockResolvedValue({ id: 'L1', mes: '2099-11' }) },
       client: { findMany: jest.fn().mockResolvedValue([{ id: 'cli', name: 'ELIO', document: '04301559000102', cep: '1', endereco: 'r', bairro: 'b', cidade: 'c', uf: 'PA', phoneE164: '+559499', telefonesExtras: [] }]) },
-      charge: { findFirst: jest.fn().mockResolvedValue({ id: 'sem-boleto', boletoCodigoSolicitacao: null }), create: jest.fn() },
+      charge: { findFirst: jest.fn().mockResolvedValue({ id: 'sem-boleto', boletoCodigoSolicitacao: null, loteId: 'L1' }), create: jest.fn(), update: jest.fn() },
     };
     const charges: any = { gerarBoleto: jest.fn().mockResolvedValue({}) };
     const r = await new LotesService(prisma, {} as any, charges, {} as any).gerarLinha('L1', ELIO);

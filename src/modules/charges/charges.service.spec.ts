@@ -112,3 +112,15 @@ describe('ChargesService.dispatch - boleto recém-criado', () => {
     expect(notifications.dispatchCharges).toHaveBeenCalled();
   });
 });
+
+describe('ChargesService.moverParaMensal', () => {
+  it('leva para Boletos do mês e junta à planilha do mês do vencimento', async () => {
+    const prisma: any = {
+      charge: { findUnique: jest.fn().mockResolvedValue({ id: 'c1', dueDate: new Date('2026-11-30T00:00:00Z'), loteId: null }), update: jest.fn() },
+      loteMensal: { findFirst: jest.fn().mockResolvedValue({ id: 'L-nov' }) },
+    };
+    await new ChargesService(prisma, {} as any, {} as any, {} as any).moverParaMensal('c1');
+    expect(prisma.loteMensal.findFirst.mock.calls[0][0].where).toEqual({ mes: '2026-11' });
+    expect(prisma.charge.update.mock.calls[0][0].data).toEqual({ origem: 'MENSAL', loteId: 'L-nov' });
+  });
+});

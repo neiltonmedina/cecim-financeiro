@@ -96,6 +96,12 @@ export class ChargesController {
     return this.chargesService.update(id, dto);
   }
 
+  /** Leva a cobrança para a lista "Boletos do mês". */
+  @Patch(':id/mover-mensal')
+  moverParaMensal(@Param('id') id: string) {
+    return this.chargesService.moverParaMensal(id);
+  }
+
   @Patch(':id/paid')
   markAsPaid(@Param('id') id: string) {
     return this.chargesService.markAsPaid(id);

@@ -15,6 +15,7 @@ const ACOES: Record<string, [string, Resumo?]> = {
   'POST /charges': ['Criou cobrança', (req, res) => res?.description ?? req.body?.description],
   'POST /charges/bulk': ['Criou cobranças em lote', (req, res) => `${res?.criadas ?? ''} cobrança(s)`],
   'PATCH /charges/:id': ['Editou cobrança', nomeCliente],
+  'PATCH /charges/:id/mover-mensal': ['Levou cobrança para Boletos do mês', nomeCliente],
   'PATCH /charges/:id/paid': ['Marcou cobrança como paga', nomeCliente],
   'PATCH /charges/:id/cancel': ['Cancelou cobrança', nomeCliente],
   'POST /charges/:id/gerar-boleto': ['Gerou boleto no Inter', nomeCliente],

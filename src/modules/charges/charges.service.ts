@@ -176,6 +176,24 @@ export class ChargesService {
     return charge;
   }
 
+  /**
+   * Leva para "Boletos do mês" uma cobrança criada por outro caminho (importada do
+   * Inter ou criada à mão). Fica junto da planilha do mês do vencimento, se houver.
+   */
+  async moverParaMensal(id: string) {
+    const charge = await this.prisma.charge.findUnique({ where: { id }, select: { id: true, dueDate: true, loteId: true } });
+    if (!charge) throw new NotFoundException('Cobrança não encontrada.');
+    const lote = charge.loteId
+      ? null
+      : await this.prisma.loteMensal.findFirst({ where: { mes: charge.dueDate.toISOString().slice(0, 7) }, orderBy: { createdAt: 'asc' } });
+    return this.prisma.charge.update({
+      where: { id },
+      data: { origem: 'MENSAL', ...(lote ? { loteId: lote.id } : {}) },
+      omit: { boletoPdfBase64: true },
+      include: { client: true },
+    });
+  }
+
   async markAsPaid(id: string) {
     await this.findOne(id);
     await this.conversationsService.registrarPagamento(id);
