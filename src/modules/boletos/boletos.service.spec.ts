@@ -1,4 +1,4 @@
-import { calcularValorAtualizado, hojeSaoPaulo } from './boletos.service';
+import { BoletosService, calcularValorAtualizado, hojeSaoPaulo } from './boletos.service';
 
 describe('calcularValorAtualizado', () => {
   it('não acrescenta nada antes ou no dia do vencimento', () => {
@@ -243,5 +243,29 @@ describe('BoletosService.conferirBoletosNoInter', () => {
     expect(atualizacoes.cancelado).toMatchObject({ boletoCodigoSolicitacao: null, pixCopiaECola: null, linhaDigitavel: null });
     expect(atualizacoes.velho).toMatchObject({ pixCopiaECola: 'PIX-NOVO' });
     expect(atualizacoes.ok).toBeUndefined();
+  });
+});
+
+describe('BoletosService.zipDosBoletosInter - PDFs direto do Inter', () => {
+  it('monta o ZIP NOME_CNPJ.pdf, mesmo com boleto fora do painel, e lista quem ficou sem PDF', async () => {
+    const JSZip = require('jszip');
+    const dados: Record<string, any> = {
+      c1: { cobranca: { codigoSolicitacao: 'c1', situacao: 'A_RECEBER', pagador: { nome: 'J SANTOS DE ARAUJO LTDA', cpfCnpj: '21.528.512/0001-03' } } },
+      c2: { cobranca: { codigoSolicitacao: 'c2', situacao: 'A_RECEBER', pagador: { nome: 'OUTRA EMPRESA', cpfCnpj: '11111111000111' } } },
+    };
+    const inter: any = {
+      isConfigured: () => true,
+      consultarBruto: jest.fn(async (c: string) => dados[c]),
+      baixarPdf: jest.fn(async (c: string) => (c === 'c1' ? Buffer.from('PDF1').toString('base64') : undefined)),
+    };
+    const service = new BoletosService({} as any, inter, { get: () => '' } as any);
+
+    const r = await service.zipDosBoletosInter(['c1', 'c2', 'c1']);
+
+    expect(r.incluidos).toBe(1);
+    expect(r.semPdf).toEqual(['OUTRA EMPRESA']);
+    const arquivos = Object.keys((await JSZip.loadAsync(r.zip)).files);
+    expect(arquivos).toEqual(['J_SANTOS_DE_ARAUJO_LTDA_21528512000103.pdf']);
+    expect(inter.baixarPdf).toHaveBeenCalledTimes(2); // código repetido só é baixado uma vez
   });
 });

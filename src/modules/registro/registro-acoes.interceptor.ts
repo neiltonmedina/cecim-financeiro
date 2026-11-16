@@ -26,6 +26,7 @@ const ACOES: Record<string, [string, Resumo?]> = {
   'POST /charges/limpar-avisos': ['Limpou os avisos de Com problema', (req, res) => `${res?.semTelefone ?? 0} sem telefone · ${res?.falhas ?? 0} falha(s) de envio`],
   'POST /charges/recuperar-boletos': ['Procurou boletos já criados no Inter', (req, res) => `${res?.vinculados?.length ?? 0} ligado(s)`],
   'POST /boletos/inter/importar': ['Importou boletos do Inter', (req, res) => `${res?.importadas ?? (req.body?.codigos ?? []).length} boleto(s)`],
+  'POST /boletos/inter/zip': ['Baixou PDFs de boletos do Inter', (req) => `${(req.body?.codigos ?? []).length} boleto(s)`],
   'POST /boletos/webhook/registrar': ['Ativou o aviso de pagamento do Inter'],
   'POST /lotes': ['Iniciou geração dos boletos do mês', (req) => `${req.body?.mes} · aviso ${req.body?.diasAntes} dia(s) antes · envio automático ${req.body?.envioAutomatico ? 'ligado' : 'desligado'}`],
   'POST /lotes/:id/gerar': ['Gerou boleto do mês', (req, res) => `${res?.cliente ?? req.body?.linha?.nome} · ${res?.status}`],

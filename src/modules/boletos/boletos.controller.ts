@@ -5,6 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BoletosService } from './boletos.service';
 import { BaixarBoletosDto } from './dto/baixar-boletos.dto';
+import { BaixarBoletosInterDto } from './dto/baixar-boletos-inter.dto';
 
 @ApiTags('boletos')
 @Controller('boletos')
@@ -67,6 +68,23 @@ export class BoletosController {
   @UseGuards(JwtAuthGuard)
   consultarInter(@Param('codigoSolicitacao') codigoSolicitacao: string) {
     return this.boletosService.consultarBruto(codigoSolicitacao);
+  }
+
+  /** Baixa num ZIP os PDFs de boletos achados na busca do Inter (mesmo os que não estão no painel). */
+  @Post('inter/zip')
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  async zipInter(@Body() dto: BaixarBoletosInterDto, @Res() res: Response) {
+    const { zip, incluidos, semPdf } = await this.boletosService.zipDosBoletosInter(dto.codigos);
+    if (!incluidos) throw new NotFoundException('Nenhum dos boletos escolhidos tem PDF disponível no Inter.');
+    res.set({
+      'Content-Type': 'application/zip',
+      'Content-Disposition': `attachment; filename="boletos-inter-${new Date().toISOString().slice(0, 10)}.zip"`,
+      'Content-Length': zip.length,
+      'X-Sem-Pdf': encodeURIComponent(semPdf.join(', ')),
+      'Access-Control-Expose-Headers': 'X-Sem-Pdf',
+    });
+    res.send(zip);
   }
 
   /** Baixa num ZIP os PDFs dos boletos escolhidos no painel. */

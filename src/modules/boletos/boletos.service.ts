@@ -340,6 +340,45 @@ export class BoletosService {
 
 
   /**
+   * ZIP com os PDFs de boletos que estão no Inter (achados na busca do Inter), mesmo os que
+   * ainda não foram importados para o painel. Nome do arquivo: NOME_CNPJ.pdf.
+   */
+  async zipDosBoletosInter(codigos: string[]): Promise<{ zip: Buffer; incluidos: number; semPdf: string[] }> {
+    if (!this.inter.isConfigured()) throw new BadRequestException('Integração com o Inter não configurada.');
+    const zip = new JSZip();
+    const usados = new Set<string>();
+    const semPdf: string[] = [];
+    const unicos = [...new Set(codigos)];
+    const fila = [...unicos.entries()];
+    // Poucos pedidos ao mesmo tempo (o Inter limita) e a ordem do ZIP segue a da lista.
+    const resultados: ({ nome: string; documento: string; pdf: string } | { falhou: string })[] = new Array(unicos.length);
+    await Promise.all(
+      Array.from({ length: 4 }, async () => {
+        for (let item = fila.shift(); item; item = fila.shift()) {
+          const [i, codigo] = item;
+          try {
+            const b = lerCobrancaInter(await this.inter.consultarBruto(codigo));
+            const pdf = await this.inter.baixarPdf(codigo);
+            resultados[i] = pdf ? { nome: b.nome, documento: b.documento, pdf } : { falhou: b.nome || codigo };
+          } catch (error: any) {
+            this.logger.warn(`Não foi possível baixar o PDF do boleto ${codigo} no Inter: ${error.message}`);
+            resultados[i] = { falhou: codigo };
+          }
+        }
+      }),
+    );
+    for (const r of resultados) {
+      if ('falhou' in r) { semPdf.push(r.falhou); continue; }
+      const base = `${r.nome.replace(/[\\/*?:"<>|]/g, '').trim().replace(/\s+/g, '_') || 'cliente'}_${soDigitos(r.documento)}`;
+      let nome = `${base}.pdf`;
+      for (let seq = 2; usados.has(nome); seq++) nome = `${base}_${seq}.pdf`;
+      usados.add(nome);
+      zip.file(nome, Buffer.from(r.pdf, 'base64'));
+    }
+    return { zip: await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }), incluidos: usados.size, semPdf };
+  }
+
+  /**
    * ZIP com os PDFs dos boletos escolhidos (nome do arquivo como o agente:
    * NOME_CNPJ.pdf). Boleto sem PDF guardado é buscado no Inter e guardado.
    */
