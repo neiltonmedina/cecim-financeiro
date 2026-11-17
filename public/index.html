@@ -2436,7 +2436,7 @@ function solucaoDoErro(msg, temBoleto) {
   const t = String(msg || '');
   if (/#131008\b|sem boleto/i.test(t)) return temBoleto ? 'reenviar' : 'boleto';
   if (/#(131026|131009|100|131050)\b|phone|number|recipient|telefone/i.test(t)) return 'telefone';
-  if (/#(132000|132001|132012|132015|132016|133010|190|131031|368|131042|131030)\b|token|template ativo/i.test(t)) return 'suporte';
+  if (/#(132000|132001|132012|132015|132016|133010|190|131031|368|131042|131030)\b|token|authentication|template ativo/i.test(t)) return 'suporte';
   return 'reenviar';
 }
 
@@ -2724,7 +2724,7 @@ const ERROS_WHATSAPP = {
   132015: 'O modelo de mensagem foi pausado pela Meta (baixa qualidade).',
   132016: 'O modelo de mensagem foi desativado pela Meta.',
   133010: 'O número de envio da empresa não está registrado no WhatsApp.',
-  190: 'O token de acesso do WhatsApp expirou ou é inválido. É preciso gerar um novo no painel da Meta.',
+  190: 'A Meta recusou a chave de acesso do WhatsApp (expirou, foi revogada ou é temporária). É preciso gerar uma chave permanente na Meta e trocá-la no Render (variável WHATSAPP_ACCESS_TOKEN). Depois clique em "Disparar de novo".',
 };
 function explicarErroEnvio(msg, temBoleto = false) {
   const texto = String(msg || '');
@@ -2736,7 +2736,7 @@ function explicarErroEnvio(msg, temBoleto = false) {
   if (/sem boleto/i.test(texto)) return 'Cobrança sem boleto (linha digitável/Pix vazios). Clique em "Conferir cadastro e gerar boleto".';
   if (/template ativo não encontrado/i.test(texto)) return 'Modelo de mensagem não cadastrado/ativo no painel (aba Modelos de mensagem).';
   if (/fetch failed|timeout|ECONN|ETIMEDOUT|socket/i.test(texto)) return 'Sem conexão com o WhatsApp no momento. Dispare de novo em alguns minutos.';
-  if (/token|OAuth/i.test(texto)) return ERROS_WHATSAPP[190];
+  if (/token|OAuth|authentication/i.test(texto)) return ERROS_WHATSAPP[190];
   if (/phone|number|recipient/i.test(texto)) return 'Problema com o telefone do cliente. Confira o número (DDD + número) no botão Editar.';
   return 'Erro não identificado - veja o detalhe técnico abaixo e, se continuar, avise o suporte do sistema.';
 }
