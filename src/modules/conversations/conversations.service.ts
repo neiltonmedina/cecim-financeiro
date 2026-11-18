@@ -71,6 +71,18 @@ export class ConversationsService {
     }
   }
 
+  /** Para mensagens sem texto simples: guarda só se o número não for de um cliente cadastrado. */
+  async guardarSeNaoForCliente(fromPhoneRaw: string, tipo: string, conteudo: string) {
+    const phone = normalizePhone(fromPhoneRaw);
+    const altPhone = alternativeBrPhone(phone);
+    const telefones = altPhone ? [phone, altPhone] : [phone];
+    const cliente = await this.prisma.client.findFirst({
+      where: { OR: [{ phoneE164: { in: telefones } }, { telefonesExtras: { hasSome: telefones } }] },
+      select: { id: true },
+    });
+    if (!cliente) await this.guardarMensagemDesconhecida(phone, conteudo, tipo);
+  }
+
   /** Pausa/retoma manualmente a régua e as respostas automáticas de uma conversa (ação do painel). */
   async setPaused(conversationId: string, paused: boolean) {
     return this.prisma.conversation.update({ where: { id: conversationId }, data: { paused } });

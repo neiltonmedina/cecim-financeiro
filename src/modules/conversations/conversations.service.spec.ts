@@ -43,6 +43,19 @@ describe('ConversationsService - mensagem de número que não é de cliente', ()
     expect(Date.now() - apagar.getTime()).toBeGreaterThan(6.9 * 24 * 60 * 60 * 1000);
   });
 
+  it('mensagem sem texto simples (ex.: código com botão) de número desconhecido também é guardada', async () => {
+    const { service, prisma } = setup();
+    prisma.client.findFirst = jest.fn().mockResolvedValue(null);
+    prisma.mensagemRecebida = { create: jest.fn().mockResolvedValue({}), deleteMany: jest.fn().mockResolvedValue({}) };
+    await service.guardarSeNaoForCliente('15551234567', 'unsupported', '{"type":"unsupported"}');
+    expect(prisma.mensagemRecebida.create.mock.calls[0][0].data).toMatchObject({ de: '+15551234567', tipo: 'unsupported' });
+
+    prisma.client.findFirst = jest.fn().mockResolvedValue({ id: 'cliente' });
+    prisma.mensagemRecebida.create.mockClear();
+    await service.guardarSeNaoForCliente('5594999990000', 'image', '{}');
+    expect(prisma.mensagemRecebida.create).not.toHaveBeenCalled();
+  });
+
   it('um erro ao guardar não derruba o recebimento do WhatsApp', async () => {
     const { service, prisma } = setup();
     prisma.mensagemRecebida = { create: jest.fn().mockRejectedValue(new Error('banco fora')), deleteMany: jest.fn() };

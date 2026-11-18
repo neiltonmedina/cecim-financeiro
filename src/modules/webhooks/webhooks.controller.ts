@@ -82,6 +82,13 @@ export class WebhooksController {
             this.conversations.handleInboundWhatsApp(message.from, text, message.id, payload).catch((err) => {
               this.logger.error(`Erro ao processar mensagem do agente: ${err.message}`);
             });
+          } else if (message.from) {
+            // Mensagem sem texto simples (ex.: código de confirmação da Meta com botão "copiar"):
+            // se não for de cliente, guarda o conteúdo para o administrador ver.
+            const { from, id, timestamp, ...conteudo } = message;
+            this.conversations
+              .guardarSeNaoForCliente(from, message.type ?? 'desconhecido', JSON.stringify(conteudo))
+              .catch((err) => this.logger.error(`Erro ao guardar mensagem sem texto: ${err.message}`));
           }
         }
       }
