@@ -129,6 +129,26 @@ export class WhatsAppProvider implements ChannelProvider {
     });
   }
 
+  /**
+   * Quem é o dono da conta do WhatsApp usada pelo painel: nome da conta, portfólio
+   * (empresa) dono no Gerenciador de Negócios e dados do número. Cada parte é
+   * consultada separada: se a chave não tiver permissão para uma, as outras aparecem.
+   */
+  async contaNaMeta() {
+    const waba = this.config.get<string>('whatsapp.businessAccountId');
+    const phoneId = this.config.get<string>('whatsapp.phoneNumberId');
+    const tentar = (fn: () => Promise<any>) => fn().then((dados) => ({ dados }), (e: any) => ({ erro: e.message as string }));
+    const [conta, numero] = await Promise.all([
+      waba
+        ? tentar(() => this.graph(`${waba}?fields=id,name,currency,owner_business_info,account_review_status,business_verification_status`))
+        : Promise.resolve({ erro: 'WHATSAPP_BUSINESS_ACCOUNT_ID não definido no Render.' }),
+      phoneId
+        ? tentar(() => this.graph(`${phoneId}?fields=display_phone_number,verified_name,quality_rating,name_status,messaging_limit_tier`))
+        : Promise.resolve({ erro: 'WHATSAPP_PHONE_NUMBER_ID não definido no Render.' }),
+    ]);
+    return { contaId: waba || null, numeroId: phoneId || null, conta, numero };
+  }
+
   /** Envia um modelo de mensagem (categoria Utilidade, pt_BR) para aprovação da Meta. */
   async criarModeloMeta(nome: string, texto: string, exemplos: string[], botoes: string[] = [], rodape?: string): Promise<{ id: string; status: string }> {
     const waba = this.config.get<string>('whatsapp.businessAccountId');

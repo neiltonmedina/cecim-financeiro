@@ -656,6 +656,11 @@
         <div id="novo-usuario-msg" style="font-size:13px; margin-top:8px;"></div>
       </div>
       <div class="card">
+        <div class="card-head"><div><h3>Conta do WhatsApp na Meta</h3><div class="hint">Mostra a qual empresa (portfólio do Gerenciador de Negócios) pertence o WhatsApp que o painel usa. Não mostra qual perfil pessoal do Facebook é administrador: isso só aparece dentro do Gerenciador, em Pessoas.</div></div>
+          <button class="secondary" onclick="consultarContaMeta()">Consultar na Meta</button></div>
+        <div id="conta-meta"></div>
+      </div>
+      <div class="card">
         <div class="card-head"><div><h3>Registro de ações</h3><div class="hint">Quem fez o quê no painel: cadastros, disparos, baixas, boletos e modelos (últimas 300 ações).</div></div></div>
         <div class="filters"><select id="registro-usuario" onchange="loadRegistro()"><option value="">Todos os usuários</option></select></div>
         <div id="registro-lista" class="loading">Carregando...</div>
@@ -2985,6 +2990,30 @@ async function loadConversations() {
     el.innerHTML = html;
   } catch (e) {
     el.innerHTML = '<div class="empty">' + e.message + '</div>';
+  }
+}
+
+/** De quem é a conta do WhatsApp usada pelo painel (portfólio dono na Meta). Só administrador. */
+async function consultarContaMeta() {
+  const el = document.getElementById('conta-meta');
+  el.innerHTML = '<div class="loading">Consultando a Meta...</div>';
+  try {
+    const r = await api('/whatsapp-admin/conta');
+    const c = r.conta.dados || {};
+    const n = r.numero.dados || {};
+    const dono = c.owner_business_info;
+    const linha = (rotulo, valor) => `<tr><td style="color:var(--muted); white-space:nowrap;">${rotulo}</td><td><strong>${escHtml(valor ?? '-')}</strong></td></tr>`;
+    el.innerHTML = '<table>' +
+      linha('Empresa dona (portfólio)', dono ? `${dono.name} (ID ${dono.id})` : (r.conta.erro ? 'Não informado: ' + r.conta.erro : 'Não informado pela Meta')) +
+      linha('Conta do WhatsApp', c.name ? `${c.name} (ID ${c.id})` : (r.conta.erro || r.contaId)) +
+      linha('Número', n.display_phone_number || r.numero.erro) +
+      linha('Nome que o cliente vê', n.verified_name) +
+      linha('Qualidade do número', { GREEN: 'Alta', YELLOW: 'Média', RED: 'Baixa' }[n.quality_rating] || n.quality_rating) +
+      linha('Verificação da empresa', c.business_verification_status) +
+      '</table>' +
+      (dono ? `<div class="hint" style="margin-top:10px;">Para achar quem administra: entre no Facebook, abra <a href="https://business.facebook.com/settings/?business_id=${encodeURIComponent(dono.id)}" target="_blank" rel="noopener">o Gerenciador de Negócios dessa empresa</a> e veja em <strong>Usuários → Pessoas</strong>. Só abre para quem já tem acesso a ela.</div>` : '');
+  } catch (e) {
+    el.innerHTML = '<div class="empty">' + escHtml(e.message) + '</div>';
   }
 }
 
