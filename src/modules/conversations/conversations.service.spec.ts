@@ -31,38 +31,6 @@ describe('ConversationsService - entregas duplicadas da Meta', () => {
   });
 });
 
-describe('ConversationsService - mensagem de número que não é de cliente', () => {
-  it('guarda o texto (ex.: código da Meta) para o administrador ver e apaga as antigas', async () => {
-    const { service, prisma } = setup();
-    prisma.mensagemRecebida = { create: jest.fn().mockResolvedValue({}), deleteMany: jest.fn().mockResolvedValue({}) };
-
-    await service.handleInboundWhatsApp('5594981537130', 'Seu código de confirmação é 482913', 'wamid.META');
-
-    expect(prisma.mensagemRecebida.create).toHaveBeenCalledWith({ data: { de: '+5594981537130', tipo: 'texto', texto: 'Seu código de confirmação é 482913' } });
-    const apagar = prisma.mensagemRecebida.deleteMany.mock.calls[0][0].where.createdAt.lt as Date;
-    expect(Date.now() - apagar.getTime()).toBeGreaterThan(6.9 * 24 * 60 * 60 * 1000);
-  });
-
-  it('mensagem sem texto simples (ex.: código com botão) de número desconhecido também é guardada', async () => {
-    const { service, prisma } = setup();
-    prisma.client.findFirst = jest.fn().mockResolvedValue(null);
-    prisma.mensagemRecebida = { create: jest.fn().mockResolvedValue({}), deleteMany: jest.fn().mockResolvedValue({}) };
-    await service.guardarSeNaoForCliente('15551234567', 'unsupported', '{"type":"unsupported"}');
-    expect(prisma.mensagemRecebida.create.mock.calls[0][0].data).toMatchObject({ de: '+15551234567', tipo: 'unsupported' });
-
-    prisma.client.findFirst = jest.fn().mockResolvedValue({ id: 'cliente' });
-    prisma.mensagemRecebida.create.mockClear();
-    await service.guardarSeNaoForCliente('5594999990000', 'image', '{}');
-    expect(prisma.mensagemRecebida.create).not.toHaveBeenCalled();
-  });
-
-  it('um erro ao guardar não derruba o recebimento do WhatsApp', async () => {
-    const { service, prisma } = setup();
-    prisma.mensagemRecebida = { create: jest.fn().mockRejectedValue(new Error('banco fora')), deleteMany: jest.fn() };
-    await expect(service.handleInboundWhatsApp('5594981537130', 'oi', 'wamid.X')).resolves.toBeUndefined();
-  });
-});
-
 describe('ConversationsService - opções 1 (Pix) e 2 (boleto)', () => {
   const charge = {
     id: 'charge-1',

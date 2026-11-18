@@ -342,18 +342,6 @@ model DisparoAgendado {
   @@index([status, executarEm])
 }
 
-// Mensagens que chegam no WhatsApp da empresa vindas de números que NÃO são de clientes
-// (ex.: código de confirmação da Meta/Facebook). Só o administrador vê; apagadas após 7 dias.
-model MensagemRecebida {
-  id        String   @id @default(uuid())
-  de        String
-  tipo      String
-  texto     String?
-  createdAt DateTime @default(now())
-
-  @@index([createdAt])
-}
-
 // Quem fez o quê no painel (cadastros, disparos, baixas, modelos...).
 model RegistroAcao {
   id        String   @id @default(uuid())

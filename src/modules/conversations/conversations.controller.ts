@@ -3,8 +3,6 @@ import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { IsBoolean } from 'class-validator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { Roles } from '../auth/roles.decorator';
-import { RolesGuard } from '../auth/roles.guard';
 import { ConversationsService } from './conversations.service';
 
 class SetPausedDto {
@@ -29,14 +27,6 @@ export class ConversationsController {
       include: { client: true, charge: { omit: { boletoPdfBase64: true } } },
       orderBy: { updatedAt: 'desc' },
     });
-  }
-
-  /** Mensagens recebidas de números que não são de clientes (ex.: código de confirmação da Meta). Só o administrador. */
-  @Get('desconhecidas')
-  @UseGuards(RolesGuard)
-  @Roles('ADMIN')
-  desconhecidas() {
-    return this.prisma.mensagemRecebida.findMany({ orderBy: { createdAt: 'desc' }, take: 50 });
   }
 
   @Get(':id')
