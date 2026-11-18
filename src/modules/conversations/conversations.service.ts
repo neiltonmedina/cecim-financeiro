@@ -58,6 +58,19 @@ export class ConversationsService {
     });
   }
 
+  /**
+   * Guarda (por 7 dias, só para o administrador) o que chega de números que não são de
+   * clientes - por exemplo o código de confirmação que a Meta/Facebook manda por WhatsApp.
+   */
+  async guardarMensagemDesconhecida(de: string, texto: string, tipo: string) {
+    try {
+      await this.prisma.mensagemRecebida.create({ data: { de, tipo, texto: String(texto ?? '').slice(0, 1000) } });
+      await this.prisma.mensagemRecebida.deleteMany({ where: { createdAt: { lt: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } } });
+    } catch (error: any) {
+      this.logger.warn(`Não foi possível guardar a mensagem de ${de}: ${error.message}`);
+    }
+  }
+
   /** Pausa/retoma manualmente a régua e as respostas automáticas de uma conversa (ação do painel). */
   async setPaused(conversationId: string, paused: boolean) {
     return this.prisma.conversation.update({ where: { id: conversationId }, data: { paused } });
@@ -184,6 +197,7 @@ export class ConversationsService {
     });
     if (!clientes.length) {
       this.logger.warn(`Mensagem recebida de número não cadastrado: ${phone}`);
+      await this.guardarMensagemDesconhecida(phone, text, payload ? 'botão' : 'texto');
       return;
     }
     // Mesmo WhatsApp para mais de uma empresa (mesmo dono): a resposta vale para a

@@ -597,6 +597,11 @@
         </div>
         <div id="conversations-content" class="loading">Carregando...</div>
       </div>
+      <div class="card" id="desconhecidas-card" style="display:none; margin-top:16px;">
+        <div class="card-head"><div><h3>Mensagens de números que não são de clientes</h3><div class="hint">Só o administrador vê. Aqui aparece, por exemplo, o <strong>código de confirmação da Meta/Facebook</strong> enviado por WhatsApp ao número da empresa. Ficam guardadas por 7 dias.</div></div>
+          <button class="secondary" onclick="loadDesconhecidas()">Atualizar</button></div>
+        <div id="desconhecidas-content" class="loading">Carregando...</div>
+      </div>
     </div>
 
     <div id="tab-report" class="tab" style="display:none;">
@@ -1342,7 +1347,7 @@ function switchTab(name) {
   if (name === 'charges') loadCharges('PAINEL');
   if (name === 'mensal') { prepararMensal(); loadCharges('MENSAL'); loadLotes(); }
   if (name === 'inter') { prepararFiltroInter(); loadCharges('INTER'); verificarAvisoInter(); }
-  if (name === 'conversations') loadConversations();
+  if (name === 'conversations') { loadConversations(); loadDesconhecidas(); }
   if (name === 'messages') loadTemplates();
   if (name === 'equipe') { loadUsuarios(); loadRegistro(); }
   if (name === 'report') loadOfertas();
@@ -2986,6 +2991,30 @@ async function loadConversations() {
   } catch (e) {
     el.innerHTML = '<div class="empty">' + e.message + '</div>';
   }
+}
+
+/** Mensagens recebidas de números que não são de clientes (ex.: código de confirmação da Meta). Só ADMIN. */
+let desconhecidasTimer = null;
+async function loadDesconhecidas() {
+  const card = document.getElementById('desconhecidas-card');
+  const el = document.getElementById('desconhecidas-content');
+  if (!card || userRole !== 'ADMIN') return;
+  card.style.display = '';
+  clearTimeout(desconhecidasTimer);
+  try {
+    const msgs = await api('/conversations/desconhecidas');
+    el.className = '';
+    el.innerHTML = !msgs.length ? '<div class="empty">Nenhuma mensagem de número desconhecido nos últimos 7 dias.</div>'
+      : '<div style="overflow-x:auto;"><table><thead><tr><th>Quando</th><th>De</th><th>Mensagem</th></tr></thead><tbody>' +
+        msgs.map((m) => `<tr><td style="white-space:nowrap;">${fmtDateTime(m.createdAt)}</td><td>${escHtml(m.de)}</td>
+          <td>${escHtml(m.texto || '(sem texto)').replace(/\b(\d{4,8})\b/g, '<strong style="font-size:1.15em; background:#fff3cd; padding:0 4px; border-radius:4px;">$1</strong>')}</td></tr>`).join('') +
+        '</tbody></table></div>';
+  } catch (e) {
+    el.className = 'empty';
+    el.textContent = e.message;
+  }
+  // Enquanto a aba está aberta, atualiza sozinho (o código da Meta chega em segundos).
+  if (abaAtual === 'conversations') desconhecidasTimer = setTimeout(loadDesconhecidas, 8000);
 }
 
 async function openConversation(id) {
