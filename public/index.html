@@ -2993,6 +2993,21 @@ async function loadConversations() {
   }
 }
 
+/**
+ * Texto de uma mensagem de número desconhecido. Só destaca números em mensagem de texto comum:
+ * nas mensagens técnicas (sem texto), os números são códigos de erro da Meta, não códigos de acesso.
+ */
+function textoDesconhecida(m) {
+  if (m.tipo === 'unsupported' || /"code":\s*131051/.test(m.texto || '')) {
+    return '<span style="color:var(--red);">A Meta mandou uma mensagem que a API do WhatsApp <strong>não consegue ler</strong> (ex.: código com botão "copiar"). ' +
+      'O conteúdo não chega ao painel. Para códigos da Meta/Facebook, use a opção <strong>SMS</strong>.</span>';
+  }
+  if (m.tipo !== 'texto' && m.tipo !== 'botão') {
+    return '<span style="color:var(--muted);">Mensagem do tipo "' + escHtml(m.tipo) + '" (sem texto para mostrar).</span>';
+  }
+  return escHtml(m.texto || '(sem texto)').replace(/\b(\d{4,8})\b/g, '<strong style="font-size:1.15em; background:#fff3cd; padding:0 4px; border-radius:4px;">$1</strong>');
+}
+
 /** Mensagens recebidas de números que não são de clientes (ex.: código de confirmação da Meta). Só ADMIN. */
 let desconhecidasTimer = null;
 async function loadDesconhecidas() {
@@ -3007,7 +3022,7 @@ async function loadDesconhecidas() {
     el.innerHTML = !msgs.length ? '<div class="empty">Nenhuma mensagem de número desconhecido nos últimos 7 dias.</div>'
       : '<div style="overflow-x:auto;"><table><thead><tr><th>Quando</th><th>De</th><th>Mensagem</th></tr></thead><tbody>' +
         msgs.map((m) => `<tr><td style="white-space:nowrap;">${fmtDateTime(m.createdAt)}</td><td>${escHtml(m.de)}</td>
-          <td>${escHtml(m.texto || '(sem texto)').replace(/\b(\d{4,8})\b/g, '<strong style="font-size:1.15em; background:#fff3cd; padding:0 4px; border-radius:4px;">$1</strong>')}</td></tr>`).join('') +
+          <td>${textoDesconhecida(m)}</td></tr>`).join('') +
         '</tbody></table></div>';
   } catch (e) {
     el.className = 'empty';
