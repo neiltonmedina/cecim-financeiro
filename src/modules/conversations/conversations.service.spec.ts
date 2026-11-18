@@ -38,7 +38,7 @@ describe('ConversationsService - mensagem de número que não é de cliente', ()
 
     await service.handleInboundWhatsApp('5594981537130', 'Seu código de confirmação é 482913', 'wamid.META');
 
-    expect(prisma.mensagemRecebida.create).toHaveBeenCalledWith({ data: { de: '5594981537130', tipo: 'texto', texto: 'Seu código de confirmação é 482913' } });
+    expect(prisma.mensagemRecebida.create).toHaveBeenCalledWith({ data: { de: '+5594981537130', tipo: 'texto', texto: 'Seu código de confirmação é 482913' } });
     const apagar = prisma.mensagemRecebida.deleteMany.mock.calls[0][0].where.createdAt.lt as Date;
     expect(Date.now() - apagar.getTime()).toBeGreaterThan(6.9 * 24 * 60 * 60 * 1000);
   });
