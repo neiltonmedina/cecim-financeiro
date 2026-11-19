@@ -235,6 +235,13 @@
   .badge.NEGOCIACAO { background: var(--purple-soft); color: var(--purple); }
   .badge.AGUARDANDO_PAGAMENTO { background: var(--green-soft); color: var(--green); }
   .badge.AGUARDANDO_HUMANO { background: var(--red-soft); color: var(--red); }
+  .sinal-modelo { position:absolute; top:16px; right:18px; display:inline-flex; align-items:center; gap:8px; padding:6px 12px 6px 10px; border:2px solid #9aa5b1; border-radius:999px; background:#fff; font-size:13px; font-weight:700; color:#26334d; }
+  .sinal-ponto { display:inline-block; width:14px; height:14px; border-radius:50%; flex:none; }
+  .sinal-modelo.piscando .sinal-ponto { animation: sinal-pisca 1.4s ease-in-out infinite; }
+  @keyframes sinal-pisca { 0%, 100% { opacity:1; } 50% { opacity:.35; } }
+  .legenda-modelos { display:flex; flex-wrap:wrap; gap:14px; align-items:center; margin-bottom:14px; font-size:13px; color:var(--muted); }
+  .legenda-modelos .sinal-ponto { width:11px; height:11px; vertical-align:middle; margin-right:3px; }
+  @media (max-width:720px) { .sinal-modelo { position:static; margin-bottom:10px; } .card-head[style*="padding-right:190px"] { padding-right:0 !important; } }
   .badge.ENCERRADA { background: #eef1f6; color: var(--muted); }
 
   .human-flag { color: var(--red); font-weight: 700; }
@@ -1641,7 +1648,14 @@ async function loadTemplates() {
     const all = await api('/templates');
     modelosCache = Object.fromEntries(all.filter((t) => t.channel === 'WHATSAPP').map((t) => [t.type, t]));
     el.className = '';
-    el.innerHTML = MODELOS_EDITAVEIS.map(([tipo, titulo, quando]) => {
+    el.innerHTML = `<div class="legenda-modelos">
+        <span><i class="sinal-ponto" style="background:#1f9d55;"></i> aprovado pela Meta</span>
+        <span><i class="sinal-ponto" style="background:#f5b301;"></i> em análise</span>
+        <span><i class="sinal-ponto" style="background:#d64545;"></i> recusado / não existe na conta</span>
+        <span><i class="sinal-ponto" style="background:#9aa5b1;"></i> ainda não enviado</span>
+        <button class="secondary" style="padding:4px 10px; font-size:12px;" onclick="carregarSinaisModelos()">↻ Atualizar situação</button>
+        <span id="sinais-hora" style="color:var(--muted); font-size:12px;"></span>
+      </div>` + MODELOS_EDITAVEIS.map(([tipo, titulo, quando]) => {
       const t = modelosCache[tipo];
       if (!t) return '';
       let status;
@@ -1654,8 +1668,9 @@ async function loadTemplates() {
       const texto = semBotoes && SUGESTAO_COM_BOTOES[tipo]
         ? SUGESTAO_COM_BOTOES[tipo]
         : paraEditor(t.pendenteNome || t.metaStatus === 'REJECTED' ? (t.pendenteTexto || t.body) : t.body);
-      return `<div class="card">
-        <div class="card-head"><div><h3>${titulo} ${status}</h3><div class="hint">${quando} ${BOTOES_MODELO[tipo].length ? 'Vai com os botões ' + BOTOES_MODELO[tipo].map((b) => '<strong>' + b + '</strong>').join(' e ') + '.' : 'Sem botões.'}${semBotoes ? ' <strong style="color:#8a5a12;">Texto novo sugerido - revise e envie para aprovação.</strong>' : ''}${t.providerTemplateName ? ' · modelo na Meta: <code>' + t.providerTemplateName + '</code>' : ''}</div></div></div>
+      return `<div class="card" style="position:relative;">
+        <span id="sinal-${tipo}" class="sinal-modelo" title="Consultando a Meta..."><i class="sinal-ponto" style="background:#9aa5b1;"></i><span>Consultando...</span></span>
+        <div class="card-head" style="padding-right:190px;"><div><h3>${titulo} ${status}</h3><div class="hint">${quando} ${BOTOES_MODELO[tipo].length ? 'Vai com os botões ' + BOTOES_MODELO[tipo].map((b) => '<strong>' + b + '</strong>').join(' e ') + '.' : 'Sem botões.'}${semBotoes ? ' <strong style="color:#8a5a12;">Texto novo sugerido - revise e envie para aprovação.</strong>' : ''}${t.providerTemplateName ? ' · modelo na Meta: <code>' + t.providerTemplateName + '</code>' : ''}</div></div></div>
         <div style="display:grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap:20px;" class="modelo-grid">
           <div>
             <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
@@ -1682,6 +1697,7 @@ async function loadTemplates() {
       </div>`;
     }).join('');
     MODELOS_EDITAVEIS.forEach(([tipo]) => modelosCache[tipo] && atualizarPrevia(tipo));
+    carregarSinaisModelos();
   } catch (e) {
     el.innerHTML = '<div class="empty">' + e.message + '</div>';
   }
@@ -1727,6 +1743,31 @@ async function enviarModeloMeta(tipo) {
     msgEl.style.color = 'var(--red)';
     msgEl.textContent = e.message;
   }
+}
+
+/** Semáforo de cada modelo: confere na Meta e pinta o ícone no canto do cartão (sem recarregar os textos). */
+const COR_SINAL = { verde: '#1f9d55', amarelo: '#f5b301', vermelho: '#d64545', cinza: '#9aa5b1' };
+let sinaisTimer = null;
+async function carregarSinaisModelos() {
+  clearTimeout(sinaisTimer);
+  try {
+    const sinais = await api('/templates/situacao-meta');
+    for (const s of sinais) {
+      const el = document.getElementById('sinal-' + s.type);
+      if (!el) continue;
+      el.title = s.texto + ' - ' + s.detalhe;
+      el.className = 'sinal-modelo' + (s.cor === 'amarelo' ? ' piscando' : '');
+      el.innerHTML = `<i class="sinal-ponto" style="background:${COR_SINAL[s.cor]};"></i><span>${escHtml(s.texto)}</span>`;
+      el.style.borderColor = COR_SINAL[s.cor];
+    }
+    const hora = document.getElementById('sinais-hora');
+    if (hora) hora.textContent = 'Conferido às ' + new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  } catch (e) {
+    const hora = document.getElementById('sinais-hora');
+    if (hora) hora.textContent = 'Não foi possível consultar a Meta: ' + e.message;
+  }
+  // Com a tela aberta, reconfere a cada 60 s (só os ícones; os textos que você está editando não mudam).
+  if (abaAtual === 'messages' && document.getElementById('sinais-hora')) sinaisTimer = setTimeout(carregarSinaisModelos, 60000);
 }
 
 async function verificarModeloMeta(tipo) {

@@ -16,6 +16,12 @@ export class TemplatesController {
     return this.templatesService.findAll();
   }
 
+  /** Semáforo de cada modelo do WhatsApp (verde/amarelo/vermelho), conferido na Meta. */
+  @Get('situacao-meta')
+  situacaoNaMeta() {
+    return this.templatesService.situacaoNaMeta();
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.templatesService.findOne(id);
