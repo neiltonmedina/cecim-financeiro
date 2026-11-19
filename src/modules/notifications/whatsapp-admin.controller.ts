@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { Roles } from '../auth/roles.decorator';
@@ -27,7 +27,25 @@ export class WhatsAppAdminController {
   }
 
   @Post('subscribe-app')
-  subscribeApp(@Body('wabaId') wabaId: string) {
-    return this.whatsapp.subscribeApp(wabaId);
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN')
+  async subscribeApp(@Body('wabaId') wabaId?: string) {
+    try {
+      return await this.whatsapp.subscribeApp(wabaId ?? '');
+    } catch (error: any) {
+      throw new BadRequestException(error.message);
+    }
+  }
+
+  /** Registra o número novo na API de envio, com um PIN de 6 dígitos. Só o administrador. */
+  @Post('registrar-numero')
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN')
+  async registrarNumero(@Body('pin') pin: string) {
+    try {
+      return await this.whatsapp.registrarNumero(String(pin ?? ''));
+    } catch (error: any) {
+      throw new BadRequestException(error.message);
+    }
   }
 }

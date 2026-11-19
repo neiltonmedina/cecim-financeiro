@@ -659,6 +659,13 @@
         <div class="card-head"><div><h3>Conta do WhatsApp na Meta</h3><div class="hint">Mostra a qual empresa (portfólio do Gerenciador de Negócios) pertence o WhatsApp que o painel usa. Não mostra qual perfil pessoal do Facebook é administrador: isso só aparece dentro do Gerenciador, em Pessoas.</div></div>
           <button class="secondary" onclick="consultarContaMeta()">Consultar na Meta</button></div>
         <div id="conta-meta"></div>
+        <h4 style="margin:18px 0 6px;">Número novo: passos finais</h4>
+        <div class="hint">Depois de colar no Render a chave, o ID do número e o ID da conta do número novo: 1) registre o número; 2) ligue o recebimento das respostas (botões Pix e Boleto). Pode repetir sem problema.</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+          <button class="secondary" onclick="registrarNumeroMeta()">1. Registrar o número na API</button>
+          <button class="secondary" onclick="ligarRespostasMeta()">2. Ligar o recebimento das respostas</button>
+        </div>
+        <div id="conta-meta-acao" style="font-size:13px; margin-top:8px;"></div>
       </div>
       <div class="card">
         <div class="card-head"><div><h3>Registro de ações</h3><div class="hint">Quem fez o quê no painel: cadastros, disparos, baixas, boletos e modelos (últimas 300 ações).</div></div></div>
@@ -3010,10 +3017,40 @@ async function consultarContaMeta() {
       linha('Nome que o cliente vê', n.verified_name) +
       linha('Qualidade do número', { GREEN: 'Alta', YELLOW: 'Média', RED: 'Baixa' }[n.quality_rating] || n.quality_rating) +
       linha('Verificação da empresa', c.business_verification_status) +
+      linha('Número registrado na API', n.platform_type ? (n.platform_type === 'CLOUD_API' ? 'Sim' : 'Não - use o botão "1. Registrar o número na API"') : (r.numero.erro ? '-' : 'Não informado')) +
+      linha('Nome aprovado pela Meta', { APPROVED: 'Sim', AVAILABLE_WITHOUT_REVIEW: 'Sim', PENDING_REVIEW: 'Em análise', DECLINED: 'Recusado - ajuste o nome na Meta', NONE: 'Não enviado' }[n.name_status] || n.name_status) +
+      linha('Recebimento de respostas ligado', r.inscricao?.dados ? ((r.inscricao.dados.data || []).length ? 'Sim' : 'Não - use o botão "2. Ligar o recebimento das respostas"') : '-') +
       '</table>' +
       (dono ? `<div class="hint" style="margin-top:10px;">Para achar quem administra: entre no Facebook, abra <a href="https://business.facebook.com/settings/?business_id=${encodeURIComponent(dono.id)}" target="_blank" rel="noopener">o Gerenciador de Negócios dessa empresa</a> e veja em <strong>Usuários → Pessoas</strong>. Só abre para quem já tem acesso a ela.</div>` : '');
   } catch (e) {
     el.innerHTML = '<div class="empty">' + escHtml(e.message) + '</div>';
+  }
+}
+
+async function registrarNumeroMeta() {
+  const msg = document.getElementById('conta-meta-acao');
+  const pin = prompt('Crie um PIN de 6 números para o WhatsApp da empresa (é a "confirmação em duas etapas" do número na Meta).\n\nANOTE e guarde este PIN: a Meta pede ele de novo se o número for registrado outra vez.');
+  if (pin === null) return;
+  if (!/^\d{6}$/.test(pin.trim())) { alert('O PIN precisa ter exatamente 6 números.'); return; }
+  msg.textContent = 'Registrando o número na Meta...';
+  try {
+    await api('/whatsapp-admin/registrar-numero', { method: 'POST', body: JSON.stringify({ pin: pin.trim() }) });
+    msg.innerHTML = '<span style="color:var(--green);">✓ Número registrado. Agora clique em "2. Ligar o recebimento das respostas".</span>';
+    consultarContaMeta();
+  } catch (e) {
+    msg.innerHTML = '<span style="color:var(--red);">Não foi possível registrar: ' + escHtml(e.message) + '</span>';
+  }
+}
+
+async function ligarRespostasMeta() {
+  const msg = document.getElementById('conta-meta-acao');
+  msg.textContent = 'Ligando o recebimento das respostas...';
+  try {
+    await api('/whatsapp-admin/subscribe-app', { method: 'POST', body: JSON.stringify({}) });
+    msg.innerHTML = '<span style="color:var(--green);">✓ Recebimento ligado. Os toques em Pix/Boleto e os avisos de entregue/lida chegam ao painel.</span>';
+    consultarContaMeta();
+  } catch (e) {
+    msg.innerHTML = '<span style="color:var(--red);">Não foi possível ligar: ' + escHtml(e.message) + '</span>';
   }
 }
 

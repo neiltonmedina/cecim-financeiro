@@ -32,3 +32,50 @@ describe('WhatsAppProvider.contaNaMeta - de quem é a conta do WhatsApp', () => 
     expect(r.numero.dados.display_phone_number).toBe('+55 94 99999-0077');
   });
 });
+
+describe('WhatsAppProvider - passos finais do número novo', () => {
+  afterEach(() => jest.restoreAllMocks());
+  const provider = () =>
+    new WhatsAppProvider(config({ 'whatsapp.accessToken': 't', 'whatsapp.apiVersion': 'v20.0', 'whatsapp.businessAccountId': 'WABA1', 'whatsapp.phoneNumberId': 'PH1' }));
+
+  it('registra o número na API com o PIN de 6 dígitos', async () => {
+    const chamadas: any[] = [];
+    jest.spyOn(global, 'fetch' as any).mockImplementation(async (url: any, init: any) => {
+      chamadas.push({ url: String(url), init });
+      return { ok: true, json: async () => ({ success: true }) } as any;
+    });
+    await provider().registrarNumero('123456');
+    expect(chamadas[0].url).toBe('https://graph.facebook.com/v20.0/PH1/register');
+    expect(chamadas[0].init.method).toBe('POST');
+    expect(JSON.parse(chamadas[0].init.body)).toEqual({ messaging_product: 'whatsapp', pin: '123456' });
+  });
+
+  it('recusa PIN que não tem 6 números (sem chamar a Meta)', async () => {
+    const fetch = jest.spyOn(global, 'fetch' as any);
+    await expect(provider().registrarNumero('12a456')).rejects.toThrow('6 números');
+    await expect(provider().registrarNumero('1234567')).rejects.toThrow('6 números');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('liga o recebimento na conta configurada no Render quando nenhuma é informada', async () => {
+    const urls: string[] = [];
+    jest.spyOn(global, 'fetch' as any).mockImplementation(async (url: any) => {
+      urls.push(String(url));
+      return { ok: true, json: async () => ({ success: true }) } as any;
+    });
+    await provider().subscribeApp('');
+    expect(urls[0]).toBe('https://graph.facebook.com/v20.0/WABA1/subscribed_apps');
+  });
+
+  it('a consulta mostra se o app está inscrito para receber as respostas', async () => {
+    jest.spyOn(global, 'fetch' as any).mockImplementation(async (url: any) => {
+      const u = String(url);
+      const dados = u.includes('subscribed_apps') ? { data: [{ whatsapp_business_api_data: { id: 'APP' } }] }
+        : u.includes('/PH1?') ? { platform_type: 'CLOUD_API', name_status: 'APPROVED' } : { id: 'WABA1' };
+      return { ok: true, json: async () => dados } as any;
+    });
+    const r: any = await provider().contaNaMeta();
+    expect(r.inscricao.dados.data).toHaveLength(1);
+    expect(r.numero.dados.platform_type).toBe('CLOUD_API');
+  });
+});

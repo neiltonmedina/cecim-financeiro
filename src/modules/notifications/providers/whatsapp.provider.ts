@@ -138,15 +138,16 @@ export class WhatsAppProvider implements ChannelProvider {
     const waba = this.config.get<string>('whatsapp.businessAccountId');
     const phoneId = this.config.get<string>('whatsapp.phoneNumberId');
     const tentar = (fn: () => Promise<any>) => fn().then((dados) => ({ dados }), (e: any) => ({ erro: e.message as string }));
-    const [conta, numero] = await Promise.all([
+    const [conta, numero, inscricao] = await Promise.all([
       waba
         ? tentar(() => this.graph(`${waba}?fields=id,name,currency,owner_business_info,account_review_status,business_verification_status`))
         : Promise.resolve({ erro: 'WHATSAPP_BUSINESS_ACCOUNT_ID não definido no Render.' }),
       phoneId
-        ? tentar(() => this.graph(`${phoneId}?fields=display_phone_number,verified_name,quality_rating,name_status,messaging_limit_tier`))
+        ? tentar(() => this.graph(`${phoneId}?fields=display_phone_number,verified_name,quality_rating,name_status,messaging_limit_tier,status,platform_type,code_verification_status`))
         : Promise.resolve({ erro: 'WHATSAPP_PHONE_NUMBER_ID não definido no Render.' }),
+      waba ? tentar(() => this.graph(`${waba}/subscribed_apps`)) : Promise.resolve({ erro: 'sem conta' }),
     ]);
-    return { contaId: waba || null, numeroId: phoneId || null, conta, numero };
+    return { contaId: waba || null, numeroId: phoneId || null, conta, numero, inscricao };
   }
 
   /** Envia um modelo de mensagem (categoria Utilidade, pt_BR) para aprovação da Meta. */
@@ -175,6 +176,17 @@ export class WhatsAppProvider implements ChannelProvider {
     return (data?.data ?? []).find((t: any) => t.name === nome);
   }
 
+  /**
+   * Registra o número na API de envio (passo obrigatório depois de adicionar um número
+   * novo). O PIN de 6 dígitos vira a "confirmação em duas etapas" do número na Meta.
+   */
+  async registrarNumero(pin: string): Promise<unknown> {
+    const phoneId = this.config.get<string>('whatsapp.phoneNumberId');
+    if (!phoneId) throw new Error('Defina WHATSAPP_PHONE_NUMBER_ID no Render antes de registrar o número.');
+    if (!/^\d{6}$/.test(pin ?? '')) throw new Error('O PIN precisa ter exatamente 6 números.');
+    return this.graph(`${phoneId}/register`, { method: 'POST', body: JSON.stringify({ messaging_product: 'whatsapp', pin }) });
+  }
+
   async subscribeApp(wabaId: string): Promise<unknown> {
     const accessToken = this.config.get<string>('whatsapp.accessToken');
     const version = this.config.get<string>('whatsapp.apiVersion');
@@ -182,6 +194,8 @@ export class WhatsAppProvider implements ChannelProvider {
       throw new Error('WhatsApp não configurado: defina WHATSAPP_ACCESS_TOKEN');
     }
 
+    wabaId = wabaId || this.config.get<string>('whatsapp.businessAccountId') || '';
+    if (!wabaId) throw new Error('Defina WHATSAPP_BUSINESS_ACCOUNT_ID no Render.');
     const response = await fetch(`https://graph.facebook.com/${version}/${wabaId}/subscribed_apps`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
