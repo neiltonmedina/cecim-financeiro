@@ -58,7 +58,7 @@ describe('TemplatesService.situacaoNaMeta', () => {
     const whatsapp: any = {
       consultarModeloMeta: jest.fn(async (nome: string) => (nome === 'novo_1' ? { status: 'pending' } : undefined)),
     };
-    const r = await new TemplatesService(prisma, whatsapp).situacaoNaMeta();
+    const r = await new TemplatesService(prisma, whatsapp, { notificar: jest.fn() } as any).situacaoNaMeta();
     expect(r.map((x) => [x.type, x.cor])).toEqual([
       ['BOLETO_DISPONIVEL', 'amarelo'],
       ['COBRANCA_PENDENTE', 'vermelho'], // antigo_2 não existe na conta atual
@@ -70,7 +70,39 @@ describe('TemplatesService.situacaoNaMeta', () => {
   it('se a Meta falha, mostra cinza em vez de derrubar a tela', async () => {
     const prisma: any = { messageTemplate: { findMany: jest.fn().mockResolvedValue([{ type: 'BOLETO_DISPONIVEL', providerTemplateName: 'x', pendenteNome: null, metaMotivo: null }]) } };
     const whatsapp: any = { consultarModeloMeta: jest.fn().mockRejectedValue(new Error('token')) };
-    const r = await new TemplatesService(prisma, whatsapp).situacaoNaMeta();
+    const r = await new TemplatesService(prisma, whatsapp, { notificar: jest.fn() } as any).situacaoNaMeta();
     expect(r[0].cor).toBe('cinza');
+  });
+});
+
+describe('TemplatesService.verificarMeta - aviso no celular', () => {
+  const modelo = (extra: any = {}) => ({ id: 'm1', type: 'BOLETO_DISPONIVEL', pendenteNome: 'novo_1', pendenteTexto: 't', pendenteParams: [], pendenteBotoes: [], metaStatus: 'PENDING', body: 'b', ...extra });
+  function setup(meta: any, template: any) {
+    const prisma: any = { messageTemplate: { findUnique: jest.fn().mockResolvedValue(template), update: jest.fn().mockResolvedValue(template) } };
+    const whatsapp: any = { consultarModeloMeta: jest.fn().mockResolvedValue(meta) };
+    const push: any = { notificar: jest.fn() };
+    return { service: new TemplatesService(prisma, whatsapp, push), push };
+  }
+
+  it('avisa quando a Meta aprova', async () => {
+    const { service, push } = setup({ status: 'APPROVED' }, modelo());
+    await service.verificarMeta('m1');
+    expect(push.notificar).toHaveBeenCalledWith(expect.stringContaining('aprovado'), expect.stringContaining('Boleto a vencer'), 'messages');
+  });
+
+  it('avisa a recusa uma vez só, com o motivo', async () => {
+    const primeira = setup({ status: 'REJECTED', rejected_reason: 'INVALID_FORMAT' }, modelo());
+    await primeira.service.verificarMeta('m1');
+    expect(primeira.push.notificar).toHaveBeenCalledWith(expect.stringContaining('recusado'), expect.stringContaining('INVALID_FORMAT'), 'messages');
+
+    const repetida = setup({ status: 'REJECTED', rejected_reason: 'INVALID_FORMAT' }, modelo({ metaStatus: 'REJECTED' }));
+    await repetida.service.verificarMeta('m1');
+    expect(repetida.push.notificar).not.toHaveBeenCalled();
+  });
+
+  it('em análise não avisa nada', async () => {
+    const { service, push } = setup({ status: 'PENDING' }, modelo());
+    await service.verificarMeta('m1');
+    expect(push.notificar).not.toHaveBeenCalled();
   });
 });

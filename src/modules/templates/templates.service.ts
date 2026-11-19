@@ -3,6 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { Channel, TemplateType } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { WhatsAppProvider } from '../notifications/providers/whatsapp.provider';
+import { PushService } from '../push/push.service';
 import { BOTOES_COBRANCA, RODAPE_COBRANCA, VARIAVEIS_MODELO } from '../notifications/utils/template-renderer.util';
 import { UpdateTemplateDto } from './dto/update-template.dto';
 
@@ -81,7 +82,12 @@ export class TemplatesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly whatsapp: WhatsAppProvider,
+    private readonly push: PushService,
   ) {}
+
+  private titulo(tipo: TemplateType): string {
+    return { BOLETO_DISPONIVEL: 'Boleto a vencer', LEMBRETE_VENCIMENTO: 'Vence hoje', COBRANCA_PENDENTE: 'Boleto vencido', CONFIRMACAO_PAGAMENTO: 'Pagamento confirmado' }[tipo as string] ?? 'Modelo';
+  }
 
   findAll() {
     return this.prisma.messageTemplate.findMany({ orderBy: [{ channel: 'asc' }, { type: 'asc' }] });
@@ -179,6 +185,7 @@ export class TemplatesService {
     const status = meta?.status?.toUpperCase();
     if (status === 'APPROVED') {
       this.logger.log(`Modelo ${template.pendenteNome} aprovado pela Meta - passa a ser usado.`);
+      await this.push.notificar('🟢 Modelo aprovado pela Meta', `"${this.titulo(template.type)}" foi aprovado e já está em uso.`, 'messages');
       return this.prisma.messageTemplate.update({
         where: { id },
         data: {
@@ -197,6 +204,10 @@ export class TemplatesService {
       });
     }
     if (status === 'REJECTED' || status === 'DISABLED') {
+      // Avisa só na primeira vez (o botão "Verificar aprovação" pode consultar de novo).
+      if (template.metaStatus !== 'REJECTED') {
+        await this.push.notificar('🔴 Modelo recusado pela Meta', `"${this.titulo(template.type)}": ${meta?.rejected_reason || 'veja o motivo no painel'}.`, 'messages');
+      }
       return this.prisma.messageTemplate.update({
         where: { id },
         data: { metaStatus: 'REJECTED', metaMotivo: meta?.rejected_reason || 'Motivo não informado pela Meta' },
