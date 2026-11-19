@@ -29,7 +29,7 @@ const PRIVACY_HTML = `<!DOCTYPE html>
 </head>
 <body>
   <h1>Política de Privacidade</h1>
-  <p>Última atualização: 14 de setembro de 2026</p>
+  <p>Última atualização: 19 de novembro de 2026</p>
 
   <p>Esta Política de Privacidade descreve como a <strong>CECIM Assessoria Contábil</strong> ("nós", "nosso") coleta, usa e protege as
   informações pessoais de nossos clientes ao utilizar nosso sistema de cobrança e comunicação (incluindo mensagens via WhatsApp, SMS e e-mail).</p>
@@ -61,7 +61,10 @@ const PRIVACY_HTML = `<!DOCTYPE html>
   <p>Em conformidade com a Lei Geral de Proteção de Dados (LGPD), o titular dos dados pode solicitar a qualquer momento acesso, correção
   ou exclusão de suas informações pessoais.</p>
 
-  <h2>7. Contato</h2>
+  <h2 id="exclusao">7. Como pedir a exclusão dos seus dados</h2>
+<p>Para pedir a exclusão dos seus dados pessoais, envie um e-mail para <strong>cecimfiscal@gmail.com</strong> com o assunto "Exclusão de dados", informando seu nome e CPF/CNPJ. Respondemos em até 15 dias úteis e excluímos as informações que não precisem ser guardadas por obrigação legal (por exemplo, registros fiscais e contábeis). Você também pode pedir, pelo mesmo e-mail, para deixar de receber mensagens de cobrança por WhatsApp.</p>
+
+<h2>8. Contato</h2>
   <p>Em caso de dúvidas sobre esta política, entre em contato pelo e-mail: <a href="mailto:cecimfiscal@gmail.com">cecimfiscal@gmail.com</a></p>
 
   <footer>
