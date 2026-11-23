@@ -3167,6 +3167,8 @@ async function consultarContaMeta() {
       linha('Nome que o cliente vê', n.verified_name) +
       linha('Qualidade do número', { GREEN: 'Alta', YELLOW: 'Média', RED: 'Baixa' }[n.quality_rating] || n.quality_rating) +
       linha('Verificação da empresa', c.business_verification_status) +
+      linha('Análise da conta pela Meta', { APPROVED: 'Aprovada', PENDING: 'Em análise (pode atrasar a aprovação dos modelos)', REJECTED: 'Recusada - abra um chamado na Meta' }[c.account_review_status] || c.account_review_status) +
+      linha('Limite de envio por dia', { TIER_250: '250 clientes', TIER_1K: '1.000 clientes', TIER_10K: '10.000 clientes', TIER_100K: '100.000 clientes', TIER_UNLIMITED: 'Sem limite' }[n.messaging_limit_tier] || n.messaging_limit_tier) +
       linha('Número registrado na API', n.platform_type ? (n.platform_type === 'CLOUD_API' ? 'Sim' : 'Não - use o botão "1. Registrar o número na API"') : (r.numero.erro ? '-' : 'Não informado')) +
       linha('Nome aprovado pela Meta', { APPROVED: 'Sim', AVAILABLE_WITHOUT_REVIEW: 'Sim', PENDING_REVIEW: 'Em análise', DECLINED: 'Recusado - ajuste o nome na Meta', NONE: 'Não enviado' }[n.name_status] || n.name_status) +
       linha('Recebimento de respostas ligado', r.inscricao?.dados ? ((r.inscricao.dados.data || []).length ? 'Sim' : 'Não - use o botão "2. Ligar o recebimento das respostas"') : '-') +
