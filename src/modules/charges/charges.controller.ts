@@ -113,6 +113,12 @@ export class ChargesController {
     return this.chargesService.gerarBoleto(id);
   }
 
+  /** Desfaz o cancelamento: a cobrança volta para em aberto (sem enviar nada). */
+  @Patch(':id/reativar')
+  reativar(@Param('id') id: string) {
+    return this.chargesService.reativar(id);
+  }
+
   @Patch(':id/cancel')
   cancel(@Param('id') id: string, @Query('cancelarNoInter') cancelarNoInter?: string) {
     return this.chargesService.cancel(id, cancelarNoInter === 'true');

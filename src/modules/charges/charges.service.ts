@@ -273,6 +273,22 @@ export class ChargesService {
   }
 
   /**
+   * Reativa uma cobrança cancelada: volta para em aberto (vencida, se a data já passou).
+   * Não envia nada e não mexe no boleto - se o boleto expirou ou foi cancelado no Inter,
+   * a conferência diária o marca como "Sem boleto" e dá para gerar outro.
+   */
+  async reativar(id: string) {
+    const charge = await this.findOne(id);
+    if (charge.status !== 'CANCELADA') {
+      throw new BadRequestException('Só dá para reativar uma cobrança cancelada.');
+    }
+    return this.prisma.charge.update({
+      where: { id },
+      data: { status: charge.dueDate < new Date() ? 'VENCIDA' : 'PENDENTE', canceledAt: null },
+    });
+  }
+
+  /**
    * Dispara (emite) a cobrança pelos canais habilitados — SMS, WhatsApp e
    * E-mail — para os clientes selecionados via IDs de cobrança.
    */

@@ -2421,7 +2421,7 @@ async function loadCharges(origem = chargesOrigem) {
         ${comPdf ? `<td style="white-space:nowrap;"><input type="checkbox" class="pdf-sel" data-id="${c.id}" ${c.boletoCodigoSolicitacao ? '' : 'disabled title="Sem boleto gerado"'} onchange="atualizarContagemPdf()" />${c.boletoCodigoSolicitacao ? ` <a href="/boletos/${c.id}" target="_blank" title="Abrir o PDF" style="text-decoration:none;">📄</a>` : ''}</td>` : ''}
         <td>${escHtml(c.client?.name ?? '-')}${avisoBoleto}</td>
         <td>${telefoneCell}</td>
-        <td>${escHtml(c.description)}${origem !== 'MENSAL' && c.status !== 'CANCELADA' ? `<div style="margin-top:4px;"><button class="secondary" style="padding:3px 8px; font-size:12px;" title="Mostra esta cobrança na lista Boletos do mês (não gera boleto novo e não envia nada)" onclick="moverParaMensal('${c.id}', '${argJs(c.client?.name)}')">📅 Levar p/ Boletos do mês</button></div>` : ''}</td>
+        <td>${escHtml(c.description)}${c.status === 'CANCELADA' ? `<div style="margin-top:4px;"><button class="secondary" style="padding:3px 8px; font-size:12px;" title="Desfaz o cancelamento: a cobrança volta para em aberto (não envia nada)" onclick="reativarCobranca('${c.id}', '${argJs(c.client?.name)}')">↩ Reativar cobrança</button></div>` : ''}${origem !== 'MENSAL' && c.status !== 'CANCELADA' ? `<div style="margin-top:4px;"><button class="secondary" style="padding:3px 8px; font-size:12px;" title="Mostra esta cobrança na lista Boletos do mês (não gera boleto novo e não envia nada)" onclick="moverParaMensal('${c.id}', '${argJs(c.client?.name)}')">📅 Levar p/ Boletos do mês</button></div>` : ''}</td>
         <td>${fmtMoney(c.amountCents)}</td>
         <td>${vencimentoCell}</td>
         <td style="white-space:nowrap;"><span class="badge ${c.status}">${c.status}</span>${iconeEnvio(c)}${c.notifications?.[0]?.status === 'FAILED'
@@ -2756,6 +2756,18 @@ function traduzirBoletoErro(texto) {
 }
 
 /** Exclui (cancela) a cobrança: sai das listas e a régua para; opcionalmente cancela o boleto no Inter. */
+async function reativarCobranca(id, nome) {
+  if (!confirm(`Reativar a cobrança cancelada de ${nome}?\n\nEla volta para em aberto. Nada é enviado agora. Se o boleto antigo expirou, gere um novo em Com problema e depois use o botão 🔁.`)) return;
+  try {
+    await api('/charges/' + id + '/reativar', { method: 'PATCH' });
+    alert('Cobrança reativada. Confira o boleto (Com problema → Conferir cadastro e gerar boleto, se precisar) e depois use o 🔁 para enviar.');
+    loadCharges();
+    if (abaAtual === 'conversations') loadConversations();
+  } catch (e) {
+    alert('Não foi possível reativar: ' + e.message);
+  }
+}
+
 async function excluirCobranca(id, nome, temBoletoInter) {
   if (!confirm(`Excluir a cobrança de ${nome}?\n\nEla sai das listas e a régua de cobrança para.`)) return;
   let noInter = false;
@@ -3142,7 +3154,7 @@ async function loadConversations() {
         <td><span class="badge ${c.stage}">${c.stage.replaceAll('_', ' ')}</span></td>
         <td>${c.humanRequested ? '<span class="human-flag">⚠ precisa de humano</span>' : (c.paused ? '<span class="human-flag">⏸ pausada</span>' : '-')}</td>
         <td>${fmtDateTime(c.updatedAt)}</td>
-        <td>${parada ? `<button class="secondary" style="padding:3px 8px; font-size:14px;" title="Recomeçar a cobrança: envia de novo e recomeça os lembretes automáticos, sem criar outra cobrança" aria-label="Recomeçar a cobrança"
+        <td>${c.charge?.status === 'CANCELADA' ? `<button class="secondary" style="padding:3px 8px; font-size:13px; margin-right:4px;" title="Reativar a cobrança cancelada (desfaz o cancelamento, não envia nada)" onclick="event.stopPropagation(); reativarCobranca('${c.chargeId}', '${argJs(c.client?.name)}')">↩ Reativar</button>` : ''}${parada ? `<button class="secondary" style="padding:3px 8px; font-size:14px;" title="Recomeçar a cobrança: envia de novo e recomeça os lembretes automáticos, sem criar outra cobrança" aria-label="Recomeçar a cobrança"
           onclick="event.stopPropagation(); ${semTel ? `alert('Não dá para recomeçar: ${motivoBloqueio}.'); return;` : (ch.linhaDigitavel || ch.pixCopiaECola) ? '' : `alert('Esta cobrança está sem boleto válido no Inter. Primeiro use Com problema → Conferir cadastro e gerar boleto; depois recomece a cobrança.'); return;`} recomecarCobranca('${chargeIdUso}', '${argJs(c.client?.name)}', ${c.intervalDays || 5})">🔁</button>` : ''}</td>
       </tr>`;
     }
