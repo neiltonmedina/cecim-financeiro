@@ -3131,7 +3131,8 @@ async function loadConversations() {
     for (const c of conversations) {
       const ch = c.charge;
       const parada = !!c.chargeId && ch?.status !== 'PAGA';
-      const semTel = !c.client?.phoneE164 || c.client?.active === false || ch?.status === 'CANCELADA';
+      const motivoBloqueio = ch?.status === 'CANCELADA' ? 'a cobrança está cancelada' : (c.client?.active === false ? 'o cliente está desativado' : (!c.client?.phoneE164 ? 'o cliente está sem telefone cadastrado' : ''));
+      const semTel = !!motivoBloqueio;
       html += `<tr class="clickable" onclick="openConversation('${c.id}')">
         <td>${escHtml(c.client?.name ?? '-')}</td>
         <td>${escHtml(c.charge?.description ?? '-')}</td>
@@ -3139,7 +3140,7 @@ async function loadConversations() {
         <td>${c.humanRequested ? '<span class="human-flag">⚠ precisa de humano</span>' : (c.paused ? '<span class="human-flag">⏸ pausada</span>' : '-')}</td>
         <td>${fmtDateTime(c.updatedAt)}</td>
         <td>${parada ? `<button class="secondary" style="padding:3px 8px; font-size:14px;" title="Recomeçar a cobrança: envia de novo e recomeça os lembretes automáticos, sem criar outra cobrança" aria-label="Recomeçar a cobrança"
-          onclick="event.stopPropagation(); ${semTel ? `alert('Esta cobrança está cancelada, ou o cliente está sem telefone/desativado. Corrija o cadastro antes de recomeçar.'); return;` : (ch.linhaDigitavel || ch.pixCopiaECola) ? '' : `alert('Esta cobrança está sem boleto válido no Inter. Primeiro use Com problema → Conferir cadastro e gerar boleto; depois recomece a cobrança.'); return;`} recomecarCobranca('${c.chargeId}', '${argJs(c.client?.name)}', ${c.intervalDays || 5})">🔁</button>` : ''}</td>
+          onclick="event.stopPropagation(); ${semTel ? `alert('Não dá para recomeçar: ${motivoBloqueio}.'); return;` : (ch.linhaDigitavel || ch.pixCopiaECola) ? '' : `alert('Esta cobrança está sem boleto válido no Inter. Primeiro use Com problema → Conferir cadastro e gerar boleto; depois recomece a cobrança.'); return;`} recomecarCobranca('${c.chargeId}', '${argJs(c.client?.name)}', ${c.intervalDays || 5})">🔁</button>` : ''}</td>
       </tr>`;
     }
     html += '</tbody></table>';
