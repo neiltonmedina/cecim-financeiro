@@ -3129,8 +3129,11 @@ async function loadConversations() {
     const jaMostrada = new Set();
     let html = '<table><thead><tr><th>Cliente</th><th>Cobrança</th><th>Estágio</th><th>Atenção</th><th>Última atualização</th><th></th></tr></thead><tbody>';
     for (const c of conversations) {
-      const ch = c.charge;
-      const parada = !!c.chargeId && ch?.status !== 'PAGA';
+      const atual = c.client?.charges?.[0];
+      // Cobrança da conversa cancelada: usa a cobrança em aberto do mesmo cliente, se houver.
+      const ch = (c.charge?.status === 'CANCELADA' && atual) ? atual : c.charge;
+      const chargeIdUso = (c.charge?.status === 'CANCELADA' && atual) ? atual.id : c.chargeId;
+      const parada = !!chargeIdUso && ch?.status !== 'PAGA';
       const motivoBloqueio = ch?.status === 'CANCELADA' ? 'a cobrança está cancelada' : (c.client?.active === false ? 'o cliente está desativado' : (!c.client?.phoneE164 ? 'o cliente está sem telefone cadastrado' : ''));
       const semTel = !!motivoBloqueio;
       html += `<tr class="clickable" onclick="openConversation('${c.id}')">
@@ -3140,7 +3143,7 @@ async function loadConversations() {
         <td>${c.humanRequested ? '<span class="human-flag">⚠ precisa de humano</span>' : (c.paused ? '<span class="human-flag">⏸ pausada</span>' : '-')}</td>
         <td>${fmtDateTime(c.updatedAt)}</td>
         <td>${parada ? `<button class="secondary" style="padding:3px 8px; font-size:14px;" title="Recomeçar a cobrança: envia de novo e recomeça os lembretes automáticos, sem criar outra cobrança" aria-label="Recomeçar a cobrança"
-          onclick="event.stopPropagation(); ${semTel ? `alert('Não dá para recomeçar: ${motivoBloqueio}.'); return;` : (ch.linhaDigitavel || ch.pixCopiaECola) ? '' : `alert('Esta cobrança está sem boleto válido no Inter. Primeiro use Com problema → Conferir cadastro e gerar boleto; depois recomece a cobrança.'); return;`} recomecarCobranca('${c.chargeId}', '${argJs(c.client?.name)}', ${c.intervalDays || 5})">🔁</button>` : ''}</td>
+          onclick="event.stopPropagation(); ${semTel ? `alert('Não dá para recomeçar: ${motivoBloqueio}.'); return;` : (ch.linhaDigitavel || ch.pixCopiaECola) ? '' : `alert('Esta cobrança está sem boleto válido no Inter. Primeiro use Com problema → Conferir cadastro e gerar boleto; depois recomece a cobrança.'); return;`} recomecarCobranca('${chargeIdUso}', '${argJs(c.client?.name)}', ${c.intervalDays || 5})">🔁</button>` : ''}</td>
       </tr>`;
     }
     html += '</tbody></table>';

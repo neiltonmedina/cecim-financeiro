@@ -24,7 +24,11 @@ export class ConversationsController {
   findAll(@Query('humanRequested') humanRequested?: string) {
     return this.prisma.conversation.findMany({
       where: humanRequested === undefined ? undefined : { humanRequested: humanRequested === 'true' },
-      include: { client: true, charge: { omit: { boletoPdfBase64: true } } },
+      include: {
+        // cobrancaAtual: cobrança ainda em aberto do cliente - o botão de recomeçar usa quando a da conversa foi cancelada/substituída.
+        client: { include: { charges: { where: { status: { notIn: ['PAGA', 'CANCELADA'] } }, orderBy: { createdAt: 'desc' }, take: 1, select: { id: true, status: true, linhaDigitavel: true, pixCopiaECola: true } } } },
+        charge: { omit: { boletoPdfBase64: true } },
+      },
       orderBy: { updatedAt: 'desc' },
     });
   }
